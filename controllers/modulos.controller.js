@@ -5,11 +5,17 @@ export const listarModulos = async (req, res) => {
   try {
     const [modulos] = await pool.query(
       `SELECT 
-        m.modulo_id, m.modulo_padre_id, m.modulo_descripcion,
-        (SELECT COUNT(DISTINCT ump.usuario_id) 
-         FROM usuarios_modulos_permisos ump 
-         WHERE ump.modulo_id = m.modulo_id) as usuarios_asignados
-      FROM modulos m`
+          m.modulo_id, 
+          m.modulo_padre_id, 
+          m.modulo_descripcion,
+          (
+            SELECT COUNT(DISTINCT ump.usuario_id)
+            FROM usuarios_modulos_permisos ump
+            JOIN modulos m2 ON ump.modulo_id = m2.modulo_id
+            WHERE m2.modulo_id = m.modulo_id
+              OR m2.modulo_padre_id = m.modulo_id
+          ) as usuarios_asignados
+       FROM modulos m`
     );
 
     // Obtener permisos asociados a cada módulo

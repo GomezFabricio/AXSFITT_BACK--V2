@@ -53,7 +53,9 @@ export const login = async (req, res) => {
 
     // Obtener módulos y permisos del usuario (incluyendo modulo_padre_id y modulo_ruta)
     const [modulosPermisos] = await pool.query(
-      `SELECT DISTINCT
+      `
+      -- Permisos directos y por perfil
+      SELECT DISTINCT
         m.modulo_id,
         m.modulo_padre_id,
         m.modulo_descripcion,
@@ -64,9 +66,9 @@ export const login = async (req, res) => {
       JOIN modulos m ON ump.modulo_id = m.modulo_id
       JOIN permisos p ON ump.permiso_id = p.permiso_id
       WHERE ump.usuario_id = ?
-      
+
       UNION
-      
+
       SELECT DISTINCT
         m.modulo_id,
         m.modulo_padre_id,
@@ -78,8 +80,34 @@ export const login = async (req, res) => {
       JOIN perfiles_modulos pm ON up.perfil_id = pm.perfil_id
       JOIN modulos m ON pm.modulo_id = m.modulo_id
       JOIN permisos p ON p.modulo_id = m.modulo_id
-      WHERE up.usuario_id = ?`,
-      [usuario.usuario_id, usuario.usuario_id]
+      WHERE up.usuario_id = ?
+
+      UNION
+
+      -- Incluye módulos padres aunque no tengan permisos directos
+      SELECT DISTINCT
+        mp.modulo_id,
+        mp.modulo_padre_id,
+        mp.modulo_descripcion,
+        mp.modulo_ruta,
+        NULL as permiso_id,
+        NULL as permiso_descripcion
+      FROM (
+        SELECT m2.*
+        FROM usuarios_modulos_permisos ump
+        JOIN modulos m1 ON ump.modulo_id = m1.modulo_id
+        JOIN modulos m2 ON m1.modulo_padre_id = m2.modulo_id
+        WHERE ump.usuario_id = ?
+        UNION
+        SELECT m2.*
+        FROM usuarios_perfiles up
+        JOIN perfiles_modulos pm ON up.perfil_id = pm.perfil_id
+        JOIN modulos m1 ON pm.modulo_id = m1.modulo_id
+        JOIN modulos m2 ON m1.modulo_padre_id = m2.modulo_id
+        WHERE up.usuario_id = ?
+      ) mp
+      `,
+      [usuario.usuario_id, usuario.usuario_id, usuario.usuario_id, usuario.usuario_id]
     );
 
     // Agrupar módulos y permisos de manera estructurada
@@ -92,14 +120,13 @@ export const login = async (req, res) => {
           modulo_id: item.modulo_id,
           modulo_padre_id: item.modulo_padre_id,
           modulo_descripcion: item.modulo_descripcion,
-          modulo_ruta: item.modulo_ruta, // <-- ahora incluye la ruta
+          modulo_ruta: item.modulo_ruta,
           permisos: []
         };
         modulos.push(modulo);
       }
 
-      const permisoExiste = modulo.permisos.some(p => p.permiso_id === item.permiso_id);
-      if (!permisoExiste) {
+      if (item.permiso_id && !modulo.permisos.some(p => p.permiso_id === item.permiso_id)) {
         modulo.permisos.push({
           permiso_id: item.permiso_id,
           permiso_descripcion: item.permiso_descripcion
