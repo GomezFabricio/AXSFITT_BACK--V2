@@ -59,39 +59,39 @@ export const login = async (req, res) => {
         m.modulo_id,
         m.modulo_padre_id,
         m.modulo_descripcion,
-        m.modulo_ruta,
         p.permiso_id,
-        p.permiso_descripcion
+        p.permiso_descripcion,
+        p.permiso_ruta
       FROM usuarios_modulos_permisos ump
       JOIN modulos m ON ump.modulo_id = m.modulo_id
       JOIN permisos p ON ump.permiso_id = p.permiso_id
       WHERE ump.usuario_id = ?
-
+    
       UNION
-
+    
       SELECT DISTINCT
         m.modulo_id,
         m.modulo_padre_id,
         m.modulo_descripcion,
-        m.modulo_ruta,
         p.permiso_id,
-        p.permiso_descripcion
+        p.permiso_descripcion,
+        p.permiso_ruta
       FROM usuarios_perfiles up
       JOIN perfiles_modulos pm ON up.perfil_id = pm.perfil_id
       JOIN modulos m ON pm.modulo_id = m.modulo_id
       JOIN permisos p ON p.modulo_id = m.modulo_id
       WHERE up.usuario_id = ?
-
+    
       UNION
-
+    
       -- Incluye módulos padres aunque no tengan permisos directos
       SELECT DISTINCT
         mp.modulo_id,
         mp.modulo_padre_id,
         mp.modulo_descripcion,
-        mp.modulo_ruta,
         NULL as permiso_id,
-        NULL as permiso_descripcion
+        NULL as permiso_descripcion,
+        NULL as permiso_ruta
       FROM (
         SELECT m2.*
         FROM usuarios_modulos_permisos ump
@@ -109,31 +109,30 @@ export const login = async (req, res) => {
       `,
       [usuario.usuario_id, usuario.usuario_id, usuario.usuario_id, usuario.usuario_id]
     );
-
+    
     // Agrupar módulos y permisos de manera estructurada
     const modulos = [];
     modulosPermisos.forEach(item => {
       let modulo = modulos.find(m => m.modulo_id === item.modulo_id);
-
+    
       if (!modulo) {
         modulo = {
           modulo_id: item.modulo_id,
           modulo_padre_id: item.modulo_padre_id,
           modulo_descripcion: item.modulo_descripcion,
-          modulo_ruta: item.modulo_ruta,
           permisos: []
         };
         modulos.push(modulo);
       }
-
+    
       if (item.permiso_id && !modulo.permisos.some(p => p.permiso_id === item.permiso_id)) {
         modulo.permisos.push({
           permiso_id: item.permiso_id,
-          permiso_descripcion: item.permiso_descripcion
+          permiso_descripcion: item.permiso_descripcion,
+          permiso_ruta: item.permiso_ruta
         });
       }
     });
-
     const token = jwt.sign(
       {
         usuario_id: usuario.usuario_id,
