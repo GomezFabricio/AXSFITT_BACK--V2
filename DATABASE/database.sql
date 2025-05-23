@@ -42,6 +42,7 @@ CREATE TABLE permisos (
   modulo_id INTEGER UNSIGNED NOT NULL,
   permiso_descripcion VARCHAR(50) NULL,
   permiso_ruta VARCHAR(100) NULL,
+  permiso_visible_menu BOOLEAN DEFAULT FALSE, -- Nuevo campo: indica si el permiso es visible en el menú
   PRIMARY KEY(permiso_id),
   INDEX permisos_FKIndex1(modulo_id),
   FOREIGN KEY(modulo_id)
