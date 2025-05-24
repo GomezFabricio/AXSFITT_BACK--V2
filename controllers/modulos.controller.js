@@ -1,6 +1,6 @@
 import { pool } from '../db.js';
 
-// Listar todos los módulos con cantidad de usuarios asignados y permisos asociados
+// Listar todos los módulos con cantidad de usuarios asignados (por perfil) y permisos asociados
 export const listarModulos = async (req, res) => {
   try {
     const [modulos] = await pool.query(
@@ -9,11 +9,10 @@ export const listarModulos = async (req, res) => {
           m.modulo_padre_id, 
           m.modulo_descripcion,
           (
-            SELECT COUNT(DISTINCT ump.usuario_id)
-            FROM usuarios_modulos_permisos ump
-            JOIN modulos m2 ON ump.modulo_id = m2.modulo_id
-            WHERE m2.modulo_id = m.modulo_id
-              OR m2.modulo_padre_id = m.modulo_id
+            SELECT COUNT(DISTINCT up.usuario_id)
+            FROM usuarios_perfiles up
+            JOIN perfiles_modulos_permisos pmp ON up.perfil_id = pmp.perfil_id
+            WHERE pmp.modulo_id = m.modulo_id
           ) as usuarios_asignados
        FROM modulos m`
     );

@@ -50,8 +50,9 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (5, 'Modificar Categoria', NULL, FALSE), -- 2.1.3
 (5, 'Eliminar Categoria', NULL, FALSE), -- 2.1.4
 (4, 'Agregar Producto', '/productos/agregar', TRUE), -- 2.2
-(6, 'Aumentar Precios', '/productos/configuracion-avanzada/aumentar-precios', TRUE), -- 2.3.1
-(6, 'Notificaciones de stock', '/productos/configuracion-avanzada/notificaciones-stock', TRUE), -- 2.3.2
+(4, 'Ver Productos', '/productos', TRUE), -- 2.3
+(6, 'Aumentar Precios', '/productos/configuracion-avanzada/aumentar-precios', TRUE), -- 2.4.1
+(6, 'Notificaciones de stock', '/productos/configuracion-avanzada/notificaciones-stock', TRUE), -- 2.4.2
 
 -- Gestión de ventas
 (7, 'Listado de Ventas', '/ventas', TRUE), -- 3.1
@@ -64,36 +65,31 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (8, 'Ofertas', '/ventas/promociones/ofertas', TRUE), -- 3.8.1
 (8, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
 
--- 8. Asignar todos los permisos al usuario (usuarios_modulos_permisos)
-INSERT INTO usuarios_modulos_permisos (permiso_id, modulo_id, usuario_id) VALUES
+-- 8. Asignar todos los permisos al perfil (perfiles_modulos_permisos)
+INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 1, 1),   -- Ver Modulos
-(2, 2, 1),   -- Agregar Usuario
-(3, 2, 1),   -- Ver Usuarios
-(4, 2, 1),   -- Modificar Usuario
-(5, 2, 1),   -- Eliminar Usuario
-(6, 3, 1),   -- Agregar Perfil
-(7, 3, 1),   -- Ver Perfiles
-(8, 3, 1),   -- Modificar Perfil
-(9, 3, 1),   -- Eliminar Perfil
-(10, 5, 1),  -- Agregar Categoria
-(11, 5, 1),  -- Ver Categorias
-(12, 5, 1),  -- Modificar Categoria
-(13, 5, 1),  -- Eliminar Categoria
-(14, 4, 1),  -- Agregar Producto
-(15, 6, 1),  -- Aumentar Precios
-(16, 6, 1),  -- Notificaciones de stock
-(17, 7, 1),  -- Listado de Ventas
-(18, 7, 1),  -- Agregar Venta
-(19, 7, 1),  -- Clientes
-(20, 7, 1),  -- Metricas
-(21, 7, 1),  -- Metodos de Pago
-(22, 7, 1),  -- Metodos de Envio
-(23, 7, 1),  -- Logistica
-(24, 8, 1),  -- Ofertas
-(25, 8, 1);  -- Cupones de Descuento
-
--- 9. Asignar módulos al perfil (perfiles_modulos)
-INSERT INTO perfiles_modulos (perfil_id, modulo_id) VALUES
-(1, 1), (1, 2), (1, 3),
-(1, 4), (1, 5), (1, 6),
-(1, 7), (1, 8);
+(1, 2, 2),   -- Agregar Usuario
+(1, 2, 3),   -- Ver Usuarios
+(1, 2, 4),   -- Modificar Usuario
+(1, 2, 5),   -- Eliminar Usuario
+(1, 3, 6),   -- Agregar Perfil
+(1, 3, 7),   -- Ver Perfiles
+(1, 3, 8),   -- Modificar Perfil
+(1, 3, 9),   -- Eliminar Perfil
+(1, 5, 10),  -- Agregar Categoria
+(1, 5, 11),  -- Ver Categorias
+(1, 5, 12),  -- Modificar Categoria
+(1, 5, 13),  -- Eliminar Categoria
+(1, 4, 14),  -- Agregar Producto
+(1, 4, 15),  -- Ver Productos
+(1, 6, 16),  -- Aumentar Precios
+(1, 6, 17),  -- Notificaciones de stock
+(1, 7, 18),  -- Listado de Ventas
+(1, 7, 19),  -- Agregar Venta
+(1, 7, 20),  -- Clientes
+(1, 7, 21),  -- Metricas
+(1, 7, 22),  -- Metodos de Pago
+(1, 7, 23),  -- Metodos de Envio
+(1, 7, 24),  -- Logistica
+(1, 8, 25),  -- Ofertas
+(1, 8, 26);  -- Cupones de Descuento

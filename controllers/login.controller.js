@@ -51,39 +51,25 @@ export const login = async (req, res) => {
       [usuario.usuario_id]
     );
 
-    // Obtener módulos y permisos del usuario (incluyendo modulo_padre_id y modulo_ruta)
+    // Obtener módulos y permisos del usuario (por perfiles)
     const [modulosPermisos] = await pool.query(
       `
-      -- Permisos directos y por perfil
       SELECT DISTINCT
         m.modulo_id,
         m.modulo_padre_id,
         m.modulo_descripcion,
         p.permiso_id,
         p.permiso_descripcion,
-        p.permiso_ruta
-      FROM usuarios_modulos_permisos ump
-      JOIN modulos m ON ump.modulo_id = m.modulo_id
-      JOIN permisos p ON ump.permiso_id = p.permiso_id
-      WHERE ump.usuario_id = ?
-    
-      UNION
-    
-      SELECT DISTINCT
-        m.modulo_id,
-        m.modulo_padre_id,
-        m.modulo_descripcion,
-        p.permiso_id,
-        p.permiso_descripcion,
-        p.permiso_ruta
+        p.permiso_ruta,
+        p.permiso_visible_menu
       FROM usuarios_perfiles up
-      JOIN perfiles_modulos pm ON up.perfil_id = pm.perfil_id
-      JOIN modulos m ON pm.modulo_id = m.modulo_id
-      JOIN permisos p ON p.modulo_id = m.modulo_id
+      JOIN perfiles_modulos_permisos pmp ON up.perfil_id = pmp.perfil_id
+      JOIN modulos m ON pmp.modulo_id = m.modulo_id
+      JOIN permisos p ON pmp.permiso_id = p.permiso_id
       WHERE up.usuario_id = ?
-    
+
       UNION
-    
+
       -- Incluye módulos padres aunque no tengan permisos directos
       SELECT DISTINCT
         mp.modulo_id,
@@ -91,30 +77,25 @@ export const login = async (req, res) => {
         mp.modulo_descripcion,
         NULL as permiso_id,
         NULL as permiso_descripcion,
-        NULL as permiso_ruta
+        NULL as permiso_ruta,
+        NULL as permiso_visible_menu
       FROM (
         SELECT m2.*
-        FROM usuarios_modulos_permisos ump
-        JOIN modulos m1 ON ump.modulo_id = m1.modulo_id
-        JOIN modulos m2 ON m1.modulo_padre_id = m2.modulo_id
-        WHERE ump.usuario_id = ?
-        UNION
-        SELECT m2.*
         FROM usuarios_perfiles up
-        JOIN perfiles_modulos pm ON up.perfil_id = pm.perfil_id
-        JOIN modulos m1 ON pm.modulo_id = m1.modulo_id
+        JOIN perfiles_modulos_permisos pmp ON up.perfil_id = pmp.perfil_id
+        JOIN modulos m1 ON pmp.modulo_id = m1.modulo_id
         JOIN modulos m2 ON m1.modulo_padre_id = m2.modulo_id
         WHERE up.usuario_id = ?
       ) mp
       `,
-      [usuario.usuario_id, usuario.usuario_id, usuario.usuario_id, usuario.usuario_id]
+      [usuario.usuario_id, usuario.usuario_id]
     );
-    
+
     // Agrupar módulos y permisos de manera estructurada
     const modulos = [];
     modulosPermisos.forEach(item => {
       let modulo = modulos.find(m => m.modulo_id === item.modulo_id);
-    
+
       if (!modulo) {
         modulo = {
           modulo_id: item.modulo_id,
@@ -124,15 +105,17 @@ export const login = async (req, res) => {
         };
         modulos.push(modulo);
       }
-    
+
       if (item.permiso_id && !modulo.permisos.some(p => p.permiso_id === item.permiso_id)) {
         modulo.permisos.push({
           permiso_id: item.permiso_id,
           permiso_descripcion: item.permiso_descripcion,
-          permiso_ruta: item.permiso_ruta
+          permiso_ruta: item.permiso_ruta,
+          permiso_visible_menu: item.permiso_visible_menu
         });
       }
     });
+
     const token = jwt.sign(
       {
         usuario_id: usuario.usuario_id,

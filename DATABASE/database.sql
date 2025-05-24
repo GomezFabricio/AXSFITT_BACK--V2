@@ -70,44 +70,6 @@ CREATE TABLE usuarios (
     ON UPDATE NO ACTION
 );
 
-CREATE TABLE perfiles_modulos (
-  modulo_id INTEGER UNSIGNED NOT NULL,
-  perfil_id INTEGER UNSIGNED NOT NULL,
-  INDEX perfiles_has_modulos_FKIndex1(perfil_id),
-  INDEX perfiles_has_modulos_FKIndex2(modulo_id),
-  FOREIGN KEY(perfil_id)
-    REFERENCES perfiles(perfil_id)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
-  FOREIGN KEY(modulo_id)
-    REFERENCES modulos(modulo_id)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-);
-
-CREATE TABLE usuarios_modulos_permisos (
-  ump_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  permiso_id INTEGER UNSIGNED NOT NULL,
-  modulo_id INTEGER UNSIGNED NOT NULL,
-  usuario_id INTEGER UNSIGNED NOT NULL,
-  PRIMARY KEY(ump_id),
-  INDEX usuario_modulo_permiso_FKIndex1(usuario_id),
-  INDEX usuario_modulo_permiso_FKIndex2(modulo_id),
-  INDEX usuario_modulo_permiso_FKIndex3(permiso_id),
-  FOREIGN KEY(usuario_id)
-    REFERENCES usuarios(usuario_id)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
-  FOREIGN KEY(modulo_id)
-    REFERENCES modulos(modulo_id)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION,
-  FOREIGN KEY(permiso_id)
-    REFERENCES permisos(permiso_id)
-    ON DELETE NO ACTION
-    ON UPDATE NO ACTION
-);
-
 CREATE TABLE usuarios_perfiles (
   perfil_id INTEGER UNSIGNED NOT NULL,
   usuario_id INTEGER UNSIGNED NOT NULL,
@@ -122,6 +84,34 @@ CREATE TABLE usuarios_perfiles (
     ON DELETE NO ACTION
     ON UPDATE NO ACTION
 );
+
+-- NUEVA TABLA: Asignación de permisos a perfiles sobre módulos
+CREATE TABLE perfiles_modulos_permisos (
+  pmp_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  perfil_id INTEGER UNSIGNED NOT NULL,
+  modulo_id INTEGER UNSIGNED NOT NULL,
+  permiso_id INTEGER UNSIGNED NOT NULL,
+  PRIMARY KEY(pmp_id),
+  INDEX pmp_FKIndex1(perfil_id),
+  INDEX pmp_FKIndex2(modulo_id),
+  INDEX pmp_FKIndex3(permiso_id),
+  FOREIGN KEY(perfil_id)
+    REFERENCES perfiles(perfil_id)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION,
+  FOREIGN KEY(modulo_id)
+    REFERENCES modulos(modulo_id)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION,
+  FOREIGN KEY(permiso_id)
+    REFERENCES permisos(permiso_id)
+    ON DELETE NO ACTION
+    ON UPDATE NO ACTION
+);
+
+-- Elimina las tablas que ya no se usan con la nueva lógica
+DROP TABLE IF EXISTS usuarios_modulos_permisos;
+DROP TABLE IF EXISTS perfiles_modulos;
 
 -- NUEVAS TABLAS: Gestión de Clientes y Datos de Envío
 
