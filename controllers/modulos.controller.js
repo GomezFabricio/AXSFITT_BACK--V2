@@ -58,3 +58,28 @@ export const modificarModulo = async (req, res) => {
     res.status(500).json({ message: 'Error al modificar el módulo', error });
   }
 };
+
+// Obtener permisos de una lista de módulos (por IDs)
+export const obtenerPermisosPorModulos = async (req, res) => {
+  const { moduloIds } = req.body; // array de IDs de módulos
+  if (!Array.isArray(moduloIds) || moduloIds.length === 0) {
+    return res.status(400).json({ message: 'Debe enviar un array de IDs de módulos' });
+  }
+  try {
+    const [permisos] = await pool.query(
+      `SELECT permiso_id, modulo_id, permiso_descripcion, permiso_visible_menu
+       FROM permisos
+       WHERE modulo_id IN (?)`,
+      [moduloIds]
+    );
+    // Agrupar por modulo_id
+    const agrupados = {};
+    permisos.forEach(p => {
+      if (!agrupados[p.modulo_id]) agrupados[p.modulo_id] = [];
+      agrupados[p.modulo_id].push(p);
+    });
+    res.json(agrupados);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al obtener permisos', error });
+  }
+};
