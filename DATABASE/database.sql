@@ -3,6 +3,7 @@
 CREATE TABLE perfiles (
   perfil_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   perfil_descripcion VARCHAR(50) NULL,
+  perfil_estado ENUM('activo','inactivo') DEFAULT 'activo',
   PRIMARY KEY(perfil_id)
 );
 

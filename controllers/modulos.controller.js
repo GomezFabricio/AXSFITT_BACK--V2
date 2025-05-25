@@ -33,3 +33,28 @@ export const listarModulos = async (req, res) => {
     res.status(500).json({ message: 'Error al listar módulos', error });
   }
 };
+
+// Modificar solo el nombre (descripcion) de un módulo
+export const modificarModulo = async (req, res) => {
+  const { modulo_id } = req.params;
+  const { modulo_descripcion } = req.body;
+
+  if (!modulo_descripcion || !modulo_id) {
+    return res.status(400).json({ message: 'Datos incompletos' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `UPDATE modulos SET modulo_descripcion = ? WHERE modulo_id = ?`,
+      [modulo_descripcion, modulo_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Módulo no encontrado' });
+    }
+
+    res.json({ message: 'Nombre del módulo actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al modificar el módulo', error });
+  }
+};
