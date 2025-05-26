@@ -7,6 +7,7 @@
         1.3.2 Ver Usuarios (permiso visible en menú, asociado a submodulo 1.3)
         1.3.3 Modificar Usuario (permiso interno, NO visible en menú)
         1.3.4 Eliminar Usuario (permiso interno, NO visible en menú)
+        1.3.5 Asignar Perfil (permiso interno, NO visible en menú)
 
     1.4 Perfiles (submodulo de modulo 1)
         1.4.1 Agregar Perfil (permiso visible en menú, asociado a submodulo 1.4)

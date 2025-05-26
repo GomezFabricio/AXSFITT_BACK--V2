@@ -88,3 +88,36 @@ export const agregarUsuario = async (req, res) => {
     res.status(500).json({ message: 'Error al crear usuario', error });
   }
 };
+
+export const actualizarPerfilesUsuario = async (req, res) => {
+  const { usuario_id } = req.params;
+  const { perfiles } = req.body; // Array de perfil_id
+
+  if (!usuario_id || !Array.isArray(perfiles)) {
+    return res.status(400).json({ message: 'Datos incompletos' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    // Eliminar perfiles actuales
+    await conn.query(
+      `DELETE FROM usuarios_perfiles WHERE usuario_id = ?`,
+      [usuario_id]
+    );
+    // Insertar nuevos perfiles
+    for (const perfil_id of perfiles) {
+      await conn.query(
+        `INSERT INTO usuarios_perfiles (perfil_id, usuario_id) VALUES (?, ?)`,
+        [perfil_id, usuario_id]
+      );
+    }
+    await conn.commit();
+    res.json({ message: 'Perfiles actualizados correctamente' });
+  } catch (error) {
+    await conn.rollback();
+    res.status(500).json({ message: 'Error al actualizar perfiles', error });
+  } finally {
+    conn.release();
+  }
+};

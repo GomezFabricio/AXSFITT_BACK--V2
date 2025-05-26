@@ -41,6 +41,7 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (2, 'Ver Usuarios', '/admin/usuarios', TRUE), -- 1.3.2
 (2, 'Modificar Usuario', NULL, FALSE), -- 1.3.3
 (2, 'Eliminar Usuario', NULL, FALSE), -- 1.3.4
+(2, 'Asignar Perfil', NULL, FALSE), -- 1.3.5 <-- agregado
 
 (3, 'Agregar Perfil', '/admin/perfiles/agregar', TRUE), -- 1.4.1
 (3, 'Ver Perfiles', '/admin/perfiles', TRUE), -- 1.4.2
@@ -76,24 +77,25 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 2, 4),   -- Ver Usuarios
 (1, 2, 5),   -- Modificar Usuario
 (1, 2, 6),   -- Eliminar Usuario
-(1, 3, 7),   -- Agregar Perfil
-(1, 3, 8),   -- Ver Perfiles
-(1, 3, 9),   -- Modificar Perfil
-(1, 3, 10),  -- Eliminar Perfil
-(1, 5, 11),  -- Agregar Categoria
-(1, 5, 12),  -- Ver Categorias
-(1, 5, 13),  -- Modificar Categoria
-(1, 5, 14),  -- Eliminar Categoria
-(1, 4, 15),  -- Agregar Producto
-(1, 4, 16),  -- Ver Productos
-(1, 6, 17),  -- Aumentar Precios
-(1, 6, 18),  -- Notificaciones de stock
-(1, 7, 19),  -- Listado de Ventas
-(1, 7, 20),  -- Agregar Venta
-(1, 7, 21),  -- Clientes
-(1, 7, 22),  -- Metricas
-(1, 7, 23),  -- Metodos de Pago
-(1, 7, 24),  -- Metodos de Envio
-(1, 7, 25),  -- Logistica
-(1, 8, 26),  -- Ofertas
-(1, 8, 27);  -- Cupones de Descuento
+(1, 2, 7),   -- Asignar Perfil
+(1, 3, 8),   -- Agregar Perfil
+(1, 3, 9),   -- Ver Perfiles
+(1, 3, 10),  -- Modificar Perfil
+(1, 3, 11),  -- Eliminar Perfil
+(1, 5, 12),  -- Agregar Categoria
+(1, 5, 13),  -- Ver Categorias
+(1, 5, 14),  -- Modificar Categoria
+(1, 5, 15),  -- Eliminar Categoria
+(1, 4, 16),  -- Agregar Producto
+(1, 4, 17),  -- Ver Productos
+(1, 6, 18),  -- Aumentar Precios
+(1, 6, 19),  -- Notificaciones de stock
+(1, 7, 20),  -- Listado de Ventas
+(1, 7, 21),  -- Agregar Venta
+(1, 7, 22),  -- Clientes
+(1, 7, 23),  -- Metricas
+(1, 7, 24),  -- Metodos de Pago
+(1, 7, 25),  -- Metodos de Envio
+(1, 7, 26),  -- Logistica
+(1, 8, 27),  -- Ofertas
+(1, 8, 28);  -- Cupones de Descuento
