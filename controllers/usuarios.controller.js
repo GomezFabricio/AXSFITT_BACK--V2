@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { obtenerPersonaIdDesdeToken } from './login.controller.js';
+import bcrypt from 'bcrypt';
 
 export const listarUsuarios = async (req, res) => {
   try {
@@ -41,5 +42,49 @@ export const listarUsuarios = async (req, res) => {
     res.json(usuariosConPerfiles);
   } catch (error) {
     res.status(500).json({ message: 'Error al listar usuarios', error });
+  }
+};
+
+
+export const agregarUsuario = async (req, res) => {
+  try {
+    const {
+      persona_nombre,
+      persona_apellido,
+      persona_dni,
+      persona_fecha_nac,
+      persona_domicilio,
+      persona_telefono,
+      persona_cuit,
+      usuario_email,
+      usuario_pass
+    } = req.body;
+
+    if (
+      !persona_nombre || !persona_apellido || !persona_dni ||
+      !usuario_email || !usuario_pass
+    ) {
+      return res.status(400).json({ message: 'Faltan datos obligatorios' });
+    }
+
+    // 1. Insertar persona
+    const [personaResult] = await pool.query(
+      `INSERT INTO personas (persona_nombre, persona_apellido, persona_dni, persona_fecha_nac, persona_domicilio, persona_telefono, persona_cuit)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [persona_nombre, persona_apellido, persona_dni, persona_fecha_nac, persona_domicilio, persona_telefono, persona_cuit]
+    );
+    const persona_id = personaResult.insertId;
+
+    // 2. Insertar usuario (por defecto estado_usuario_id = 1, que es 'Activo')
+    const hash = await bcrypt.hash(usuario_pass, 12);
+    const [usuarioResult] = await pool.query(
+      `INSERT INTO usuarios (persona_id, estado_usuario_id, usuario_email, usuario_pass)
+       VALUES (?, 1, ?, ?)`,
+      [persona_id, usuario_email, hash]
+    );
+
+    res.status(201).json({ message: 'Usuario creado correctamente', usuario_id: usuarioResult.insertId });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al crear usuario', error });
   }
 };
