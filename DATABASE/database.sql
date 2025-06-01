@@ -187,7 +187,7 @@ CREATE TABLE atributos (
   atributo_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   producto_id INTEGER UNSIGNED NOT NULL,
   atributo_nombre VARCHAR(100) NOT NULL,
-  atributo_valor VARCHAR(100) NOT NULL,
+  atributo_precio VARCHAR(100) NOT NULL,
   atributo_stock INTEGER UNSIGNED NULL,
   atributo_imagen VARCHAR(255) NULL,
   PRIMARY KEY(atributo_id),
@@ -296,18 +296,14 @@ CREATE TABLE ventas_detalle (
   detalle_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   venta_id INTEGER UNSIGNED NOT NULL,
   producto_id INTEGER UNSIGNED NOT NULL,
+  atributo_id INTEGER UNSIGNED NULL,
   cantidad INTEGER UNSIGNED NOT NULL,
   precio_unitario DECIMAL(10, 2) NOT NULL,
   subtotal DECIMAL(10, 2) NOT NULL,
   PRIMARY KEY(detalle_id),
-  FOREIGN KEY(venta_id)
-    REFERENCES ventas(venta_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE,
-  FOREIGN KEY(producto_id)
-    REFERENCES productos(producto_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
+  FOREIGN KEY(venta_id) REFERENCES ventas(venta_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- NUEVAS TABLAS: Promociones por Categoría
@@ -326,4 +322,40 @@ CREATE TABLE promociones (
     REFERENCES categorias(categoria_id)
     ON DELETE CASCADE
     ON UPDATE CASCADE
+);
+
+-- NUEVAS TABLAS: Gestión de Combos
+
+CREATE TABLE combos (
+  combo_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  combo_nombre VARCHAR(100) NOT NULL,
+  combo_descripcion TEXT NULL,
+  combo_precio DECIMAL(10,2) NOT NULL,
+  combo_imagen VARCHAR(255) NULL,
+  combo_activo BOOLEAN DEFAULT TRUE,
+  PRIMARY KEY(combo_id)
+);
+
+CREATE TABLE combos_productos (
+  combo_producto_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  combo_id INTEGER UNSIGNED NOT NULL,
+  producto_id INTEGER UNSIGNED NOT NULL,
+  atributo_id INTEGER UNSIGNED NULL, -- Si el combo incluye un atributo fijo, si no NULL
+  cantidad INTEGER UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY(combo_producto_id),
+  FOREIGN KEY(combo_id) REFERENCES combos(combo_id) ON DELETE CASCADE,
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE,
+  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id) ON DELETE SET NULL
+);
+
+CREATE TABLE ventas_detalle_combo_atributos (
+  vca_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  detalle_id INTEGER UNSIGNED NOT NULL, -- referencia a ventas_detalle (el combo vendido)
+  producto_id INTEGER UNSIGNED NOT NULL,
+  atributo_id INTEGER UNSIGNED NULL,
+  cantidad INTEGER UNSIGNED NOT NULL DEFAULT 1,
+  PRIMARY KEY(vca_id),
+  FOREIGN KEY(detalle_id) REFERENCES ventas_detalle(detalle_id) ON DELETE CASCADE,
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE,
+  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id) ON DELETE SET NULL
 );
