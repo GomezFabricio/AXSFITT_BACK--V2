@@ -184,20 +184,6 @@ CREATE TABLE productos (
     ON UPDATE CASCADE
 );
 
-CREATE TABLE atributos (
-  atributo_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  producto_id INTEGER UNSIGNED NOT NULL,
-  atributo_nombre VARCHAR(100) NOT NULL,
-  atributo_precio VARCHAR(100) NOT NULL,
-  atributo_stock INTEGER UNSIGNED NULL,
-  atributo_imagen VARCHAR(255) NULL,
-  PRIMARY KEY(atributo_id),
-  FOREIGN KEY(producto_id)
-    REFERENCES productos(producto_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
-);
-
 CREATE TABLE imagenes_productos (
   imagen_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   producto_id INTEGER UNSIGNED NOT NULL,
@@ -209,6 +195,52 @@ CREATE TABLE imagenes_productos (
     ON DELETE CASCADE
     ON UPDATE CASCADE
 );
+
+
+CREATE TABLE atributos (
+  atributo_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  producto_id INTEGER UNSIGNED NOT NULL,
+  atributo_nombre VARCHAR(100) NOT NULL, -- Ej: Sabor, Peso
+  PRIMARY KEY(atributo_id),
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE valores_atributo (
+  valor_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  atributo_id INTEGER UNSIGNED NOT NULL,
+  valor_nombre VARCHAR(100) NOT NULL, -- Ej: Vainilla, 1kg
+  PRIMARY KEY(valor_id),
+  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE variantes (
+  variante_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  producto_id INTEGER UNSIGNED NOT NULL,
+  imagen_id INTEGER UNSIGNED NULL,
+  precio_venta DECIMAL(10,2) NOT NULL,
+  precio_costo DECIMAL(10,2),
+  precio_oferta DECIMAL(10,2),
+  stock INTEGER UNSIGNED,
+  sku VARCHAR(50),
+  PRIMARY KEY(variante_id),
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(imagen_id) REFERENCES imagenes_productos(imagen_id)
+    ON DELETE SET NULL ON UPDATE CASCADE
+);
+
+CREATE TABLE valores_variantes (
+  variante_id INTEGER UNSIGNED NOT NULL,
+  valor_id INTEGER UNSIGNED NOT NULL,
+  PRIMARY KEY (variante_id, valor_id),
+  FOREIGN KEY(variante_id) REFERENCES variantes(variante_id)
+    ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(valor_id) REFERENCES valores_atributo(valor_id)
+    ON DELETE CASCADE ON UPDATE CASCADE
+);
+
 
 -- NUEVA TABLA: Histórico de Costos y Stock
 
