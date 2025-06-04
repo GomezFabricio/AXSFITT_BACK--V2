@@ -35,7 +35,48 @@ export const crearCategoria = async (req, res) => {
 /**
  * Agrega una subcategoría (usa el mismo mecanismo que crearCategoria).
  */
-export const agregarSubcategoria = crearCategoria;
+export const agregarSubcategoria = async (req, res) => {
+  // If categoria_padre_id comes from params for this specific route
+  const { categoria_padre_id: padreIdFromParams } = req.params;
+  const { categoria_nombre, categoria_descripcion, categoria_padre_id: padreIdFromBody } = req.body;
+  const finalCategoriaPadreId = padreIdFromParams || padreIdFromBody;
+
+
+  if (!categoria_nombre) {
+    return res.status(400).json({ message: 'El nombre de la categoría es obligatorio.' });
+  }
+
+  try {
+    // Optional: Check if parent category exists if finalCategoriaPadreId is provided
+    if (finalCategoriaPadreId) {
+      const [parentExists] = await pool.query('SELECT categoria_id FROM categorias WHERE categoria_id = ? AND categoria_estado = "activa"', [finalCategoriaPadreId]);
+      if (parentExists.length === 0) {
+        return res.status(404).json({ message: 'La categoría padre especificada no existe o está inactiva.' });
+      }
+    }
+
+    const [ordenRows] = await pool.query(
+      'SELECT COALESCE(MAX(categoria_orden), -1) + 1 AS nuevo_orden FROM categorias WHERE categoria_padre_id <=> ?',
+      [finalCategoriaPadreId || null]
+    );
+    const nuevoOrden = ordenRows[0].nuevo_orden;
+
+    const [result] = await pool.query(
+      'INSERT INTO categorias (categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_estado, categoria_orden) VALUES (?, ?, ?, ?, ?)',
+      [categoria_nombre, categoria_descripcion || null, finalCategoriaPadreId || null, 'activa', nuevoOrden]
+    );
+
+    res.status(201).json({
+      message: 'Categoría creada exitosamente.',
+      categoria_id: result.insertId,
+      categoria_padre_id: finalCategoriaPadreId || null,
+      categoria_orden: nuevoOrden
+    });
+  } catch (error) {
+    console.error('Error al crear/agregar categoría:', error);
+    res.status(500).json({ message: 'Error interno al crear/agregar la categoría.' });
+  }
+};
 
 /**
  * Modifica una categoría existente.
@@ -118,5 +159,21 @@ export const reordenarCategorias = async (req, res) => {
   } catch (error) {
     console.error('Error al reordenar categorías:', error);
     res.status(500).json({ message: 'Error interno al reordenar categorías.' });
+  }
+};
+
+
+export const getAllCategorias = async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT categoria_id, categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_orden, categoria_estado 
+       FROM categorias 
+       WHERE categoria_estado = 'activa' 
+       ORDER BY (categoria_padre_id IS NULL) DESC, categoria_padre_id ASC, categoria_orden ASC`
+    );
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Error al obtener todas las categorías:', error);
+    res.status(500).json({ message: 'Error interno al obtener categorías.' });
   }
 };
