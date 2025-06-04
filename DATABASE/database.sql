@@ -156,8 +156,9 @@ CREATE TABLE categorias (
   categoria_nombre VARCHAR(100) NOT NULL,
   categoria_descripcion TEXT NULL,
   categoria_estado ENUM('activa', 'inactiva') DEFAULT 'activa',
-  PRIMARY KEY(categoria_id),
-  FOREIGN KEY(categoria_padre_id)
+  categoria_orden INT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (categoria_id),
+  FOREIGN KEY (categoria_padre_id)
     REFERENCES categorias(categoria_id)
     ON DELETE SET NULL
     ON UPDATE CASCADE

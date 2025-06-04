@@ -20,16 +20,17 @@ INSERT INTO usuarios_perfiles (perfil_id, usuario_id) VALUES (1, 1);
 INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 (NULL, 'Administración del Sistema'),      -- 1
 (1, 'Usuarios'),                          -- 2
-(1, 'Perfiles'),                          -- 3
+(1, 'Perfiles');                          -- 3
 
 -- 2 Productos
+INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 (NULL, 'Productos'),                      -- 4
-(4, 'Categorias'),                        -- 5
-(4, 'Utilidades Productos'),              -- 6
+(4, 'Utilidades Productos');              -- 5
 
 -- 3 Gestión de ventas
-(NULL, 'Gestión de ventas'),              -- 7
-(7, 'Promociones');                       -- 8
+INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
+(NULL, 'Gestión de ventas'),              -- 6
+(6, 'Promociones');                       -- 7
 
 -- 7. Permisos con rutas asociadas y visibilidad en menú
 -- Administración del Sistema
@@ -52,29 +53,30 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (3, 'Eliminar Perfil', NULL, FALSE),                     -- 1.4.4
 
 -- Módulo 2: Productos
-(5, 'Ver Categorias', '/productos/categorias', TRUE),    -- 2.1
-(5, 'Agregar Categoria', NULL, FALSE),                   -- 2.2
-(5, 'Modificar Categoria', NULL, FALSE),                 -- 2.3
-(5, 'Eliminar Categoria', NULL, FALSE),                  -- 2.4
+(4, 'Ver Categorias', '/productos/categorias', TRUE),    -- 2.1
+(4, 'Agregar Categoria', NULL, FALSE),                   -- 2.2
+(4, 'Modificar Categoria', NULL, FALSE),                 -- 2.3
+(4, 'Eliminar Categoria', NULL, FALSE),                  -- 2.4
 (4, 'Agregar Producto', '/productos/agregar', TRUE),     -- 2.5
 (4, 'Ver Productos', '/productos', TRUE),                -- 2.6
 
 -- Submódulo 2.7: Utilidades Productos
-(6, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE),         -- 2.7.1
-(6, 'Notificaciones de stock', '/productos/utilidades/notificaciones-stock', TRUE), -- 2.7.2
+(5, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE),         -- 2.7.1
+(5, 'Notificaciones de stock', '/productos/utilidades/notificaciones-stock', TRUE); -- 2.7.2
 
 -- Módulo 3: Gestión de ventas
-(7, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
-(7, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
-(7, 'Clientes', '/ventas/clientes', TRUE),               -- 3.3
-(7, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
-(7, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
-(7, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
-(7, 'Logistica', '/ventas/logistica', TRUE),             -- 3.7
+INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
+(6, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
+(6, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
+(6, 'Clientes', '/ventas/clientes', TRUE),               -- 3.3
+(6, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
+(6, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
+(6, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
+(6, 'Logistica', '/ventas/logistica', TRUE),             -- 3.7
 
 -- Submódulo 3.8: Promociones
-(8, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
-(8, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
+(7, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
+(7, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
 
 -- 8. Asignar todos los permisos al perfil (perfiles_modulos_permisos)
 INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
@@ -92,22 +94,22 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 3, 11),  -- Eliminar Perfil
 
 -- Productos
-(1, 5, 12),  -- Ver Categorias
-(1, 5, 13),  -- Agregar Categoria
-(1, 5, 14),  -- Modificar Categoria
-(1, 5, 15),  -- Eliminar Categoria
+(1, 4, 12),  -- Ver Categorias
+(1, 4, 13),  -- Agregar Categoria
+(1, 4, 14),  -- Modificar Categoria
+(1, 4, 15),  -- Eliminar Categoria
 (1, 4, 16),  -- Agregar Producto
 (1, 4, 17),  -- Ver Productos
-(1, 6, 18),  -- Aumentar Precios
-(1, 6, 19),  -- Notificaciones de stock
+(1, 5, 18),  -- Aumentar Precios
+(1, 5, 19),  -- Notificaciones de stock
 
 -- Gestión de ventas
-(1, 7, 20),  -- Listado de Ventas
-(1, 7, 21),  -- Agregar Venta
-(1, 7, 22),  -- Clientes
-(1, 7, 23),  -- Metricas
-(1, 7, 24),  -- Metodos de Pago
-(1, 7, 25),  -- Metodos de Envio
-(1, 7, 26),  -- Logistica
-(1, 8, 27),  -- Ofertas
-(1, 8, 28);  -- Cupones de Descuento
+(1, 6, 20),  -- Listado de Ventas
+(1, 6, 21),  -- Agregar Venta
+(1, 6, 22),  -- Clientes
+(1, 6, 23),  -- Metricas
+(1, 6, 24),  -- Metodos de Pago
+(1, 6, 25),  -- Metodos de Envio
+(1, 6, 26),  -- Logistica
+(1, 7, 27),  -- Ofertas
+(1, 7, 28);  -- Cupones de Descuento
