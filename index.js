@@ -9,6 +9,7 @@ import usuariosRoutes from './routes/usuarios.routes.js';
 import modulosRoutes from './routes/modulos.routes.js';
 import perfilesRoutes from './routes/perfiles.routes.js';
 import CategoriasRoutes from './routes/categorias.routes.js';
+import ProductosRoutes from './routes/productos.routes.js';
 
 console.log('SECRET_KEY utilizada por el backend:', SECRET_KEY); // Log temporal para depuración
 
@@ -22,6 +23,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/modulos', modulosRoutes);
 app.use('/api/perfiles', perfilesRoutes);
 app.use('/api/categorias', CategoriasRoutes);
+app.use('/api/productos', ProductosRoutes);
 
 app.get('/', (req, res) => {
     res.send('Servidor funcionando correctamente');
