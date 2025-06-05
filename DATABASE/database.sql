@@ -196,6 +196,14 @@ CREATE TABLE imagenes_productos (
     ON UPDATE CASCADE
 );
 
+CREATE TABLE imagenes_temporales (
+  imagen_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
+  usuario_id INTEGER UNSIGNED NOT NULL, -- Identifica al usuario que subió las imágenes
+  imagen_url VARCHAR(255) NOT NULL,
+  imagen_orden INTEGER UNSIGNED NOT NULL,
+  fecha_subida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(imagen_id)
+);
 
 CREATE TABLE atributos (
   atributo_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
