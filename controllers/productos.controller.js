@@ -154,3 +154,48 @@ export const crearProducto = async (req, res) => {
     conn.release();
   }
 };
+
+// Guardar imágenes en la tabla temporal
+export const guardarImagenTemporal = async (req, res) => {
+  const { usuario_id, imagen_url, imagen_orden } = req.body;
+
+  if (!usuario_id || !imagen_url) {
+    return res.status(400).json({ message: 'El usuario y la URL de la imagen son obligatorios.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO imagenes_temporales (usuario_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
+      [usuario_id, imagen_url, imagen_orden]
+    );
+
+    res.status(201).json({ message: 'Imagen temporal guardada exitosamente.', imagen_id: result.insertId });
+  } catch (error) {
+    console.error('Error al guardar imagen temporal:', error);
+    res.status(500).json({ message: 'Error interno al guardar la imagen temporal.' });
+  }
+};
+
+// Obtener imágenes temporales de un usuario
+export const obtenerImagenesTemporales = async (req, res) => {
+  const { usuario_id } = req.params;
+
+  if (!usuario_id) {
+    return res.status(400).json({ message: 'El ID del usuario es obligatorio.' });
+  }
+
+  try {
+    const [imagenes] = await pool.query(
+      `SELECT imagen_id, imagen_url, imagen_orden, fecha_subida 
+       FROM imagenes_temporales 
+       WHERE usuario_id = ? 
+       ORDER BY imagen_orden ASC`,
+      [usuario_id]
+    );
+
+    res.status(200).json(imagenes);
+  } catch (error) {
+    console.error('Error al obtener imágenes temporales:', error);
+    res.status(500).json({ message: 'Error interno al obtener imágenes temporales.' });
+  }
+};
