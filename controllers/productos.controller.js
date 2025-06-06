@@ -320,3 +320,39 @@ export const eliminarImagenTemporal = async (req, res) => {
     res.status(500).json({ message: 'Error interno al eliminar la imagen.' });
   }
 };
+
+export const cancelarProcesoAltaProducto = async (req, res) => {
+  const { usuario_id } = req.body;
+
+  if (!usuario_id) {
+    return res.status(400).json({ message: 'El ID del usuario es obligatorio.' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+
+    // Obtener las URLs de las imágenes temporales asociadas al usuario
+    const [imagenes] = await conn.query(
+      `SELECT imagen_url FROM imagenes_temporales WHERE usuario_id = ?`,
+      [usuario_id]
+    );
+
+    // Eliminar las imágenes de la base de datos
+    await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ?`, [usuario_id]);
+
+    // Eliminar las imágenes del sistema de archivos
+    imagenes.forEach(({ imagen_url }) => {
+      const filePath = path.join('uploads', path.basename(imagen_url));
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error('Error al eliminar la imagen del sistema de archivos:', err);
+        }
+      });
+    });
+
+    res.status(200).json({ message: 'Proceso de alta cancelado correctamente.' });
+  } catch (error) {
+    console.error('Error al cancelar el proceso de alta:', error);
+    res.status(500).json({ message: 'Error interno al cancelar el proceso de alta.' });
+  }
+};
