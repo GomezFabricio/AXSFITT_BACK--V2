@@ -10,8 +10,8 @@ export const crearProducto = async (req, res) => {
     producto_precio_venta,
     producto_precio_costo,
     producto_precio_oferta,
-    producto_stock,
     producto_sku,
+    producto_stock, // Stock inicial del producto
     imagenes, // Array de URLs de imágenes con orden
     atributos, // Array de objetos { atributo_nombre, valores: [valor1, valor2, ...] }
     variantes, // Array de objetos { precio_venta, precio_costo, precio_oferta, stock, sku, imagen_url, valores }
@@ -35,9 +35,8 @@ export const crearProducto = async (req, res) => {
         producto_precio_costo,
         producto_precio_oferta,
         producto_sku,
-        producto_stock,
         producto_estado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'activo')`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'activo')`,
       [
         categoria_id,
         producto_nombre,
@@ -46,12 +45,19 @@ export const crearProducto = async (req, res) => {
         producto_precio_costo || null,
         producto_precio_oferta || null,
         producto_sku || null,
-        producto_stock || null,
       ]
     );
     const producto_id = productoResult.insertId;
 
-    // 2. Mover imágenes de la tabla temporal a la definitiva
+    // 2. Insertar el stock del producto (si tiene stock inicial)
+    if (producto_stock) {
+      await conn.query(
+        `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
+        [producto_id, producto_stock]
+      );
+    }
+
+    // 3. Mover imágenes de la tabla temporal a la definitiva
     const imagenIdMap = {};
     if (imagenes && imagenes.length > 0) {
       const imagenQueries = imagenes.map((url, index) =>
@@ -74,7 +80,7 @@ export const crearProducto = async (req, res) => {
       await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ?`, [usuario_id]);
     }
 
-    // 3. Insertar atributos y valores
+    // 4. Insertar atributos y valores
     const atributoIds = {};
     if (atributos && atributos.length > 0) {
       for (const atributo of atributos) {
@@ -96,7 +102,7 @@ export const crearProducto = async (req, res) => {
       }
     }
 
-    // 4. Insertar variantes
+    // 5. Insertar variantes
     if (variantes && variantes.length > 0) {
       for (const variante of variantes) {
         // Obtener imagen_id asociado a la variante
@@ -110,23 +116,29 @@ export const crearProducto = async (req, res) => {
           `INSERT INTO variantes (
             producto_id,
             imagen_id,
-            precio_venta,
-            precio_costo,
-            precio_oferta,
-            stock,
-            sku
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            variante_precio_venta,
+            variante_precio_costo,
+            variante_precio_oferta,
+            variante_sku
+          ) VALUES (?, ?, ?, ?, ?, ?)`,
           [
             producto_id,
             imagen_id,
             variante.precio_venta,
             variante.precio_costo || null,
             variante.precio_oferta || null,
-            variante.stock || null,
             variante.sku || null,
           ]
         );
         const variante_id = varianteResult.insertId;
+
+        // Insertar el stock de la variante
+        if (variante.stock) {
+          await conn.query(
+            `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
+            [variante_id, variante.stock]
+          );
+        }
 
         // Insertar valores asociados a la variante
         const valorQueries = variante.valores.map(valor_nombre => {
@@ -157,19 +169,21 @@ export const crearProducto = async (req, res) => {
 
 // Guardar imágenes en la tabla temporal
 export const guardarImagenTemporal = async (req, res) => {
-  const { usuario_id, imagen_url, imagen_orden } = req.body;
+  const { usuario_id, imagen_orden } = req.body;
 
-  if (!usuario_id || !imagen_url) {
-    return res.status(400).json({ message: 'El usuario y la URL de la imagen son obligatorios.' });
+  if (!usuario_id || !req.file) {
+    return res.status(400).json({ message: 'El usuario y la imagen son obligatorios.' });
   }
 
   try {
+    const imagen_url = `/uploads/${req.file.filename}`; // Ruta relativa de la imagen subida
+
     const [result] = await pool.query(
       `INSERT INTO imagenes_temporales (usuario_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
       [usuario_id, imagen_url, imagen_orden]
     );
 
-    res.status(201).json({ message: 'Imagen temporal guardada exitosamente.', imagen_id: result.insertId });
+    res.status(201).json({ message: 'Imagen temporal guardada exitosamente.', imagen_id: result.insertId, imagen_url });
   } catch (error) {
     console.error('Error al guardar imagen temporal:', error);
     res.status(500).json({ message: 'Error interno al guardar la imagen temporal.' });
@@ -197,5 +211,70 @@ export const obtenerImagenesTemporales = async (req, res) => {
   } catch (error) {
     console.error('Error al obtener imágenes temporales:', error);
     res.status(500).json({ message: 'Error interno al obtener imágenes temporales.' });
+  }
+};
+
+export const moverImagenTemporal = async (req, res) => {
+  const { usuario_id, imagen_id, nuevo_orden } = req.body;
+
+  if (!usuario_id || !imagen_id || nuevo_orden === undefined) {
+    return res.status(400).json({ message: 'El usuario, la imagen y el nuevo orden son obligatorios.' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // Obtener la imagen actual
+    const [imagenActual] = await conn.query(
+      `SELECT imagen_orden FROM imagenes_temporales WHERE usuario_id = ? AND imagen_id = ?`,
+      [usuario_id, imagen_id]
+    );
+
+    if (imagenActual.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    const ordenActual = imagenActual[0].imagen_orden;
+
+    // Si el nuevo orden es igual al actual, no hacer nada
+    if (ordenActual === nuevo_orden) {
+      await conn.rollback();
+      return res.status(200).json({ message: 'El orden ya está actualizado.' });
+    }
+
+    // Ajustar los órdenes de las demás imágenes
+    if (ordenActual < nuevo_orden) {
+      // Mover hacia abajo: reducir el orden de las imágenes entre el rango
+      await conn.query(
+        `UPDATE imagenes_temporales 
+         SET imagen_orden = imagen_orden - 1 
+         WHERE usuario_id = ? AND imagen_orden > ? AND imagen_orden <= ?`,
+        [usuario_id, ordenActual, nuevo_orden]
+      );
+    } else {
+      // Mover hacia arriba: incrementar el orden de las imágenes entre el rango
+      await conn.query(
+        `UPDATE imagenes_temporales 
+         SET imagen_orden = imagen_orden + 1 
+         WHERE usuario_id = ? AND imagen_orden >= ? AND imagen_orden < ?`,
+        [usuario_id, nuevo_orden, ordenActual]
+      );
+    }
+
+    // Actualizar el orden de la imagen seleccionada
+    await conn.query(
+      `UPDATE imagenes_temporales 
+       SET imagen_orden = ? 
+       WHERE usuario_id = ? AND imagen_id = ?`,
+      [nuevo_orden, usuario_id, imagen_id]
+    );
+
+    await conn.commit();
+    res.status(200).json({ message: 'Orden de la imagen actualizado correctamente.' });
+  } catch (error) {
+    console.error('Error al mover imagen temporal:', error);
+    res.status(500).json({ message: 'Error interno al mover la imagen.' });
   }
 };
