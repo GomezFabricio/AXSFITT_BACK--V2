@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -28,5 +28,8 @@ router.get('/imagenes-temporales/:usuario_id', authenticate, obtenerImagenesTemp
 
 // Ruta para mover una imagen temporal a una nueva posición
 router.put('/imagenes-temporales/mover', authenticate, moverImagenTemporal);
+
+// Ruta para eliminar una imagen temporal
+router.delete('/imagenes-temporales', authenticate, eliminarImagenTemporal);
 
 export default router;

@@ -1,4 +1,6 @@
 import { pool } from '../db.js';
+import fs from 'fs';
+import path from 'path';
 
 // Función para dar de alta un producto con atributos y variantes
 export const crearProducto = async (req, res) => {
@@ -276,5 +278,45 @@ export const moverImagenTemporal = async (req, res) => {
   } catch (error) {
     console.error('Error al mover imagen temporal:', error);
     res.status(500).json({ message: 'Error interno al mover la imagen.' });
+  }
+};
+
+export const eliminarImagenTemporal = async (req, res) => {
+  const { usuario_id, imagen_id } = req.body;
+
+  if (!usuario_id || !imagen_id) {
+    return res.status(400).json({ message: 'El usuario y la imagen son obligatorios.' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+
+    // Obtener la URL de la imagen desde la base de datos
+    const [imagen] = await conn.query(
+      `SELECT imagen_url FROM imagenes_temporales WHERE usuario_id = ? AND imagen_id = ?`,
+      [usuario_id, imagen_id]
+    );
+
+    if (imagen.length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    const imagenUrl = imagen[0].imagen_url;
+
+    // Eliminar la imagen de la base de datos
+    await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ? AND imagen_id = ?`, [usuario_id, imagen_id]);
+
+    // Eliminar la imagen del sistema de archivos
+    const filePath = path.join('uploads', path.basename(imagenUrl));
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error('Error al eliminar la imagen del sistema de archivos:', err);
+      }
+    });
+
+    res.status(200).json({ message: 'Imagen eliminada correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar imagen temporal:', error);
+    res.status(500).json({ message: 'Error interno al eliminar la imagen.' });
   }
 };
