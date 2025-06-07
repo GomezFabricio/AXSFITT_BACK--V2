@@ -381,17 +381,3 @@ CREATE TABLE envios_invitados (
     ON UPDATE CASCADE
 );
 
--- ============================================
--- GESTIÓN DE POLITIACAS DE PRECIOS
--- ============================================
-
-CREATE TABLE politica_precios (
-  politica_id INTEGER UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  categoria_id INTEGER UNSIGNED NOT NULL,
-  margen_min DECIMAL(5, 2) NOT NULL COMMENT 'Ej: 0.10 para 10%',
-  margen_max DECIMAL(5, 2) NOT NULL COMMENT 'Ej: 0.50 para 50%',
-  fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (categoria_id) REFERENCES categorias(categoria_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
-);
