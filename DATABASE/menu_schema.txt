@@ -21,7 +21,7 @@
     2.3 Modificar Categoria (permiso interno, NO visible en menú)
     2.4 Eliminar Categoria (permiso interno, NO visible en menú)
     2.5 Agregar Producto (permiso visible en menú, asociado al modulo 2)
-    2.6 Definir Precio Prodcuto (permiso visible en menú, asociado al modulo 2)
+    2.6 Definir Precio Prodcuto (permiso NO visible en menú, asociado al modulo 2)
     2.7 Ver Productos (permiso visible en menú, asociado al modulo 2)
     2.8 Utilidades Productos (submodulo de modulo 2)
         2.8.1 Aumentar Precios (permiso visible en menú, asociado a submodulo 2.4)

@@ -59,7 +59,7 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (4, 'Modificar Categoria', NULL, FALSE),                 -- 2.3
 (4, 'Eliminar Categoria', NULL, FALSE),                  -- 2.4
 (4, 'Agregar Producto', '/productos/agregar', TRUE),     -- 2.5
-(4, 'Definir Precio Producto', '/productos/definir-precio', TRUE), -- 2.6
+(4, 'Definir Precio Producto', '/productos/definir-precio', FALSE), -- 2.6
 (4, 'Ver Productos', '/productos', TRUE);                -- 2.7
 
 -- Submódulo 2.8: Utilidades Productos

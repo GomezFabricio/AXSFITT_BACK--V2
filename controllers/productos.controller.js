@@ -95,27 +95,27 @@ export const crearProducto = async (req, res) => {
       }
     }
 
-        // 5. Insertar variantes
+    // 5. Insertar variantes
     if (variantes && variantes.length > 0) {
       for (const variante of variantes) {
         let imagen_id = null;
-    
+
         // Obtener imagen_id desde la tabla imagenes_productos usando imagen_url
         if (variante.imagen_url) {
           const [imagenResult] = await conn.query(
             `SELECT imagen_id FROM imagenes_productos WHERE producto_id = ? AND imagen_url = ?`,
             [producto_id, variante.imagen_url]
           );
-        
+
           if (imagenResult.length > 0) {
             imagen_id = imagenResult[0].imagen_id;
           } else {
             console.error(`No se encontró imagen_id para la URL: ${variante.imagen_url}`);
           }
         }
-        
+
         console.log('Buscando imagen_id con producto_id:', producto_id, 'y imagen_url:', variante.imagen_url);
-    
+
         // Insertar variante
         const [varianteResult] = await conn.query(
           `INSERT INTO variantes (
@@ -136,25 +136,33 @@ export const crearProducto = async (req, res) => {
           ]
         );
         const variante_id = varianteResult.insertId;
-    
+
+        // Insertar stock de la variante (si tiene stock inicial)
+        if (variante.stock) {
+          await conn.query(
+            `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
+            [variante_id, variante.stock]
+          );
+        }
+
         // Insertar valores asociados a la variante
         const valorQueries = variante.valores.map(valor => {
           const atributo_nombre = Object.keys(atributoIds).find(nombre =>
             atributos.some(attr => attr.atributo_nombre === nombre && valor === valor)
           );
-    
+
           if (!atributo_nombre) {
             throw new Error(`No se encontró el atributo relacionado con el valor: ${valor}`);
           }
-    
+
           const atributo_id = atributoIds[atributo_nombre];
-    
+
           return conn.query(
             `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
             [variante_id, atributo_id, valor]
           );
         });
-    
+
         await Promise.all(valorQueries);
       }
     }
