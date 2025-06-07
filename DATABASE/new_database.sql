@@ -214,20 +214,11 @@ CREATE TABLE atributos (
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
-CREATE TABLE valores_atributo (
-  valor_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  atributo_id INTEGER UNSIGNED NOT NULL,
-  valor_nombre VARCHAR(100) NOT NULL,
-  PRIMARY KEY(valor_id),
-  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id)
-    ON DELETE CASCADE ON UPDATE CASCADE
-);
-
 CREATE TABLE variantes (
   variante_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   producto_id INTEGER UNSIGNED NOT NULL,
   imagen_id INTEGER UNSIGNED NULL,
-  variante_precio_venta DECIMAL(10,2) NOT NULL,
+  variante_precio_venta DECIMAL(10,2),
   variante_precio_costo DECIMAL(10,2),
   variante_precio_oferta DECIMAL(10,2),
   variante_sku VARCHAR(50),
@@ -240,11 +231,12 @@ CREATE TABLE variantes (
 
 CREATE TABLE valores_variantes (
   variante_id INTEGER UNSIGNED NOT NULL,
-  valor_id INTEGER UNSIGNED NOT NULL,
-  PRIMARY KEY (variante_id, valor_id),
+  atributo_id INTEGER UNSIGNED NOT NULL,
+  valor_nombre VARCHAR(100) NOT NULL,
+  PRIMARY KEY (variante_id, atributo_id),
   FOREIGN KEY(variante_id) REFERENCES variantes(variante_id)
     ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY(valor_id) REFERENCES valores_atributo(valor_id)
+  FOREIGN KEY(atributo_id) REFERENCES atributos(atributo_id)
     ON DELETE CASCADE ON UPDATE CASCADE
 );
 
@@ -261,11 +253,7 @@ CREATE TABLE stock (
   fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY(stock_id),
   FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY(variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  CHECK (
-    (producto_id IS NOT NULL AND variante_id IS NULL) OR
-    (producto_id IS NULL AND variante_id IS NOT NULL)
-  )
+  FOREIGN KEY(variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- ============================================
@@ -290,11 +278,7 @@ CREATE TABLE combos_productos (
   PRIMARY KEY(cp_id),
   FOREIGN KEY(cp_combo_id) REFERENCES combos(combo_id) ON DELETE CASCADE,
   FOREIGN KEY(cp_producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE,
-  FOREIGN KEY(cp_variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE,
-  CHECK (
-    (cp_producto_id IS NOT NULL AND cp_variante_id IS NULL) OR
-    (cp_producto_id IS NULL AND cp_variante_id IS NOT NULL)
-  )
+  FOREIGN KEY(cp_variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE
 );
 
 -- ============================================

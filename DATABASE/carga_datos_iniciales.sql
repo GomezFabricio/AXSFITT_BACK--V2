@@ -50,7 +50,7 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (3, 'Agregar Perfil', '/admin/perfiles/agregar', TRUE),  -- 1.4.1
 (3, 'Ver Perfiles', '/admin/perfiles', TRUE),            -- 1.4.2
 (3, 'Modificar Perfil', NULL, FALSE),                    -- 1.4.3
-(3, 'Eliminar Perfil', NULL, FALSE),                     -- 1.4.4
+(3, 'Eliminar Perfil', NULL, FALSE);                     -- 1.4.4
 
 -- Módulo 2: Productos
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -75,7 +75,7 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (6, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
 (6, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
 (6, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
-(6, 'Logistica', '/ventas/logistica', TRUE),             -- 3.7
+(6, 'Logistica', '/ventas/logistica', TRUE);             -- 3.7
 
 -- Submódulo 3.8: Promociones
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -106,7 +106,7 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 4, 17),  -- Ver Productos
 (1, 4, 18),  -- Definir Precio Producto
 (1, 5, 19),  -- Aumentar Precios
-(1, 5, 20);  -- Notificaciones de stock
+(1, 5, 20),  -- Notificaciones de stock
 
 -- Gestión de ventas
 (1, 6, 21),  -- Listado de Ventas

@@ -5,7 +5,7 @@ import path from 'path';
 // Función para dar de alta un producto con atributos y variantes
 export const crearProducto = async (req, res) => {
   const {
-    usuario_id, // ID del usuario que está realizando la operación
+    usuario_id,
     producto_nombre,
     categoria_id,
     producto_descripcion,
@@ -13,9 +13,9 @@ export const crearProducto = async (req, res) => {
     producto_precio_costo,
     producto_precio_oferta,
     producto_sku,
-    producto_stock, // Stock inicial del producto
-    imagenes, // Array de URLs de imágenes con orden
-    atributos, // Array de objetos { atributo_nombre, valores: [valor1, valor2, ...] }
+    producto_stock,
+    imagenes,
+    atributos, // Array de objetos { atributo_nombre }
     variantes, // Array de objetos { precio_venta, precio_costo, precio_oferta, stock, sku, imagen_url, valores }
   } = req.body;
 
@@ -62,13 +62,13 @@ export const crearProducto = async (req, res) => {
     // 3. Mover imágenes de la tabla temporal a la definitiva
     const imagenIdMap = {};
     if (imagenes && imagenes.length > 0) {
-      const imagenQueries = imagenes.map((url, index) =>
+      const imagenQueries = imagenes.map((imagen, index) =>
         conn.query(
           `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden)
-           SELECT ?, imagen_url, imagen_orden
-           FROM imagenes_temporales
-           WHERE usuario_id = ? AND imagen_url = ?`,
-          [producto_id, usuario_id, url]
+          SELECT ?, imagen_url, ?
+          FROM imagenes_temporales
+          WHERE usuario_id = ? AND imagen_id = ?`,
+          [producto_id, index, usuario_id, imagen.id]
         )
       );
       const imagenResults = await Promise.all(imagenQueries);
@@ -82,7 +82,7 @@ export const crearProducto = async (req, res) => {
       await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ?`, [usuario_id]);
     }
 
-    // 4. Insertar atributos y valores
+    // 4. Insertar atributos
     const atributoIds = {};
     if (atributos && atributos.length > 0) {
       for (const atributo of atributos) {
@@ -92,15 +92,6 @@ export const crearProducto = async (req, res) => {
         );
         const atributo_id = atributoResult.insertId;
         atributoIds[atributo.atributo_nombre] = atributo_id;
-
-        // Insertar valores del atributo
-        const valorQueries = atributo.valores.map(valor =>
-          conn.query(
-            `INSERT INTO valores_atributo (atributo_id, valor_nombre) VALUES (?, ?)`,
-            [atributo_id, valor]
-          )
-        );
-        await Promise.all(valorQueries);
       }
     }
 
@@ -134,26 +125,24 @@ export const crearProducto = async (req, res) => {
         );
         const variante_id = varianteResult.insertId;
 
-        // Insertar el stock de la variante
-        if (variante.stock) {
-          await conn.query(
-            `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
-            [variante_id, variante.stock]
-          );
-        }
-
         // Insertar valores asociados a la variante
-        const valorQueries = variante.valores.map(valor_nombre => {
+        const valorQueries = variante.valores.map(valor => {
           const atributo_nombre = Object.keys(atributoIds).find(nombre =>
-            atributos.some(attr => attr.atributo_nombre === nombre && attr.valores.includes(valor_nombre))
+            atributos.some(attr => attr.atributo_nombre === nombre && valor === valor)
           );
+
+          if (!atributo_nombre) {
+            throw new Error(`No se encontró el atributo relacionado con el valor: ${valor}`);
+          }
+
           const atributo_id = atributoIds[atributo_nombre];
+
           return conn.query(
-            `INSERT INTO valores_variantes (variante_id, valor_id) 
-             SELECT ?, valor_id FROM valores_atributo WHERE atributo_id = ? AND valor_nombre = ?`,
-            [variante_id, atributo_id, valor_nombre]
+            `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
+            [variante_id, atributo_id, valor]
           );
         });
+
         await Promise.all(valorQueries);
       }
     }
