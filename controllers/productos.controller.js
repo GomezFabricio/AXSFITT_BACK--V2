@@ -15,8 +15,8 @@ export const crearProducto = async (req, res) => {
     producto_sku,
     producto_stock,
     imagenes,
-    atributos, // Array de objetos { atributo_nombre }
-    variantes, // Array de objetos { precio_venta, precio_costo, precio_oferta, stock, sku, imagen_url, valores }
+    atributos,
+    variantes,
   } = req.body;
 
   if (!producto_nombre || !categoria_id) {
@@ -26,6 +26,9 @@ export const crearProducto = async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+
+    // Determinar el estado del producto
+    const producto_estado = producto_precio_venta ? 'activo' : 'pendiente';
 
     // 1. Insertar el producto
     const [productoResult] = await conn.query(
@@ -37,8 +40,9 @@ export const crearProducto = async (req, res) => {
         producto_precio_costo,
         producto_precio_oferta,
         producto_sku,
-        producto_estado
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'activo')`,
+        producto_estado,
+        producto_visible
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         categoria_id,
         producto_nombre,
@@ -47,6 +51,8 @@ export const crearProducto = async (req, res) => {
         producto_precio_costo || null,
         producto_precio_oferta || null,
         producto_sku || null,
+        producto_estado,
+        true, // Valor por defecto para producto_visible
       ]
     );
     const producto_id = productoResult.insertId;
@@ -60,7 +66,6 @@ export const crearProducto = async (req, res) => {
     }
 
     // 3. Mover imágenes de la tabla temporal a la definitiva
-    const imagenIdMap = {};
     if (imagenes && imagenes.length > 0) {
       const imagenQueries = imagenes.map((imagen, index) =>
         conn.query(
@@ -71,12 +76,7 @@ export const crearProducto = async (req, res) => {
           [producto_id, index, usuario_id, imagen.id]
         )
       );
-      const imagenResults = await Promise.all(imagenQueries);
-
-      // Mapear URLs a IDs
-      imagenResults.forEach((result, index) => {
-        imagenIdMap[imagenes[index]] = result.insertId;
-      });
+      await Promise.all(imagenQueries);
 
       // Eliminar las imágenes de la tabla temporal
       await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ?`, [usuario_id]);
@@ -116,6 +116,9 @@ export const crearProducto = async (req, res) => {
 
         console.log('Buscando imagen_id con producto_id:', producto_id, 'y imagen_url:', variante.imagen_url);
 
+        // Determinar el estado de la variante
+        const variante_estado = variante.precio_venta ? 'activo' : 'pendiente';
+
         // Insertar variante
         const [varianteResult] = await conn.query(
           `INSERT INTO variantes (
@@ -124,8 +127,9 @@ export const crearProducto = async (req, res) => {
             variante_precio_venta,
             variante_precio_costo,
             variante_precio_oferta,
-            variante_sku
-          ) VALUES (?, ?, ?, ?, ?, ?)`,
+            variante_sku,
+            variante_estado
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [
             producto_id,
             imagen_id,
@@ -133,6 +137,7 @@ export const crearProducto = async (req, res) => {
             variante.precio_costo || null,
             variante.precio_oferta || null,
             variante.sku || null,
+            variante_estado,
           ]
         );
         const variante_id = varianteResult.insertId;
@@ -363,5 +368,40 @@ export const cancelarProcesoAltaProducto = async (req, res) => {
   } catch (error) {
     console.error('Error al cancelar el proceso de alta:', error);
     res.status(500).json({ message: 'Error interno al cancelar el proceso de alta.' });
+  }
+};
+
+export const obtenerProductos = async (req, res) => {
+  try {
+    const baseUrl = `${req.protocol}://${req.get('host')}/uploads`;
+
+    const [productos] = await pool.query(`
+      SELECT 
+        p.producto_id,
+        p.producto_nombre AS nombre,
+        c.categoria_nombre AS categoria,
+        COALESCE(SUM(s.cantidad), 0) AS stock_total,
+        CONCAT(?, ip.imagen_url) AS imagen_url
+      FROM productos p
+      LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
+      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
+        SELECT MIN(imagen_orden) 
+        FROM imagenes_productos 
+        WHERE producto_id = p.producto_id
+      )
+      LEFT JOIN stock s ON s.producto_id = p.producto_id OR s.variante_id IN (
+        SELECT variante_id 
+        FROM variantes 
+        WHERE producto_id = p.producto_id
+      )
+      WHERE p.producto_estado = 'activo' AND p.producto_visible = TRUE
+      GROUP BY p.producto_id, ip.imagen_url, c.categoria_nombre
+      ORDER BY p.producto_nombre ASC
+    `, [baseUrl]);
+
+    res.status(200).json(productos);
+  } catch (error) {
+    console.error('Error al obtener productos:', error);
+    res.status(500).json({ message: 'Error interno al obtener productos.' });
   }
 };

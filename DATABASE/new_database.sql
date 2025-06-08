@@ -174,9 +174,10 @@ CREATE TABLE productos (
   producto_precio_costo DECIMAL(10, 2) NULL,
   producto_precio_oferta DECIMAL(10, 2) NULL,
   producto_sku VARCHAR(50) NULL,
-  producto_estado ENUM('activo', 'inactivo') DEFAULT 'activo',
+  producto_estado ENUM('activo', 'inactivo', 'pendiente') DEFAULT 'activo',
   producto_fecha_alta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   producto_fecha_baja TIMESTAMP NULL,
+  producto_visible BOOLEAN DEFAULT TRUE,
   PRIMARY KEY(producto_id),
   FOREIGN KEY(categoria_id)
     REFERENCES categorias(categoria_id)
@@ -222,6 +223,7 @@ CREATE TABLE variantes (
   variante_precio_costo DECIMAL(10,2),
   variante_precio_oferta DECIMAL(10,2),
   variante_sku VARCHAR(50),
+  variante_estado ENUM('activo', 'inactivo', 'pendiente') DEFAULT 'activo',
   PRIMARY KEY(variante_id),
   FOREIGN KEY(producto_id) REFERENCES productos(producto_id)
     ON DELETE CASCADE ON UPDATE CASCADE,
