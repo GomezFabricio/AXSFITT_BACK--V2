@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -37,5 +37,12 @@ router.post('/cancelar-proceso-alta', authenticate, cancelarProcesoAltaProducto)
 
 // Ruta para obtener todos los productos
 router.get('/', authenticate, obtenerProductos);
+
+// Ruta para eliminar un producto (baja lógica)
+router.delete('/:producto_id', authenticate, eliminarProducto);
+
+// Ruta para cambiar la visibilidad de un producto
+router.put('/cambiar-visibilidad', authenticate, cambiarVisibilidadProducto);
+
 
 export default router;

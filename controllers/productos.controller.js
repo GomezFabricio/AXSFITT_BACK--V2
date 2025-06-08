@@ -379,7 +379,8 @@ export const obtenerProductos = async (req, res) => {
         p.producto_nombre AS nombre,
         c.categoria_nombre AS categoria,
         COALESCE(SUM(s.cantidad), 0) AS stock_total,
-        ip.imagen_url
+        ip.imagen_url,
+        p.producto_visible
       FROM productos p
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
       LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
@@ -392,8 +393,8 @@ export const obtenerProductos = async (req, res) => {
         FROM variantes 
         WHERE producto_id = p.producto_id
       )
-      WHERE p.producto_estado = 'pendiente' AND p.producto_visible = TRUE
-      GROUP BY p.producto_id, ip.imagen_url, c.categoria_nombre
+      WHERE p.producto_estado = 'pendiente'
+      GROUP BY p.producto_id, ip.imagen_url, c.categoria_nombre, p.producto_visible
       ORDER BY p.producto_nombre ASC
     `);
 
@@ -401,5 +402,52 @@ export const obtenerProductos = async (req, res) => {
   } catch (error) {
     console.error('Error al obtener productos:', error);
     res.status(500).json({ message: 'Error interno al obtener productos.' });
+  }
+};
+export const eliminarProducto = async (req, res) => {
+  const { producto_id } = req.params;
+
+  if (!producto_id) {
+    return res.status(400).json({ message: 'El ID del producto es obligatorio.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `UPDATE productos SET producto_estado = 'inactivo' WHERE producto_id = ?`,
+      [producto_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado.' });
+    }
+
+    res.status(200).json({ message: 'Producto eliminado correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar producto:', error);
+    res.status(500).json({ message: 'Error interno al eliminar producto.' });
+  }
+};
+
+export const cambiarVisibilidadProducto = async (req, res) => {
+  const { producto_id, visible } = req.body;
+
+  if (!producto_id || visible === undefined) {
+    return res.status(400).json({ message: 'El ID del producto y el estado de visibilidad son obligatorios.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `UPDATE productos SET producto_visible = ? WHERE producto_id = ?`,
+      [visible, producto_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado.' });
+    }
+
+    res.status(200).json({ message: 'Visibilidad del producto actualizada correctamente.' });
+  } catch (error) {
+    console.error('Error al cambiar visibilidad del producto:', error);
+    res.status(500).json({ message: 'Error interno al cambiar visibilidad del producto.' });
   }
 };
