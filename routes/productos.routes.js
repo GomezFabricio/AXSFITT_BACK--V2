@@ -36,6 +36,6 @@ router.delete('/imagenes-temporales', authenticate, eliminarImagenTemporal);
 router.post('/cancelar-proceso-alta', authenticate, cancelarProcesoAltaProducto);
 
 // Ruta para obtener todos los productos
-router.get('/productos', authenticate, obtenerProductos);
+router.get('/', authenticate, obtenerProductos);
 
 export default router;

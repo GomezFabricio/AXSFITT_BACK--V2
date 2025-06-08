@@ -373,15 +373,13 @@ export const cancelarProcesoAltaProducto = async (req, res) => {
 
 export const obtenerProductos = async (req, res) => {
   try {
-    const baseUrl = `${req.protocol}://${req.get('host')}/uploads`;
-
     const [productos] = await pool.query(`
       SELECT 
         p.producto_id,
         p.producto_nombre AS nombre,
         c.categoria_nombre AS categoria,
         COALESCE(SUM(s.cantidad), 0) AS stock_total,
-        CONCAT(?, ip.imagen_url) AS imagen_url
+        ip.imagen_url
       FROM productos p
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
       LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
@@ -394,10 +392,10 @@ export const obtenerProductos = async (req, res) => {
         FROM variantes 
         WHERE producto_id = p.producto_id
       )
-      WHERE p.producto_estado = 'activo' AND p.producto_visible = TRUE
+      WHERE p.producto_estado = 'pendiente' AND p.producto_visible = TRUE
       GROUP BY p.producto_id, ip.imagen_url, c.categoria_nombre
       ORDER BY p.producto_nombre ASC
-    `, [baseUrl]);
+    `);
 
     res.status(200).json(productos);
   } catch (error) {
