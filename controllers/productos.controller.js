@@ -640,7 +640,8 @@ export const actualizarProducto = async (req, res) => {
       const imagenQueries = imagenes.map((imagen, index) =>
         conn.query(
           `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
-          [producto_id, imagen.url, index]
+          [producto_id, imagen.imagen_url, index]
+
         )
       );
       await Promise.all(imagenQueries);
