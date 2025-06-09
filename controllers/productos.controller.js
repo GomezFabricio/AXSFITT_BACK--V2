@@ -534,6 +534,7 @@ export const obtenerProductoPorId = async (req, res) => {
         p.producto_precio_costo,
         p.producto_sku,
         p.producto_descripcion,
+        p.categoria_id,
         COALESCE(SUM(s.cantidad), 0) AS stock_total,
         ip.imagen_id AS imagen_id,
         ip.imagen_url
