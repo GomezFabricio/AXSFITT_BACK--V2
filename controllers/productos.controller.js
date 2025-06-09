@@ -514,3 +514,182 @@ export const obtenerDetallesStock = async (req, res) => {
     res.status(500).json({ message: 'Error interno al obtener detalles de stock.' });
   }
 };
+
+
+export const obtenerProductoPorId = async (req, res) => {
+  const { producto_id } = req.params;
+
+  if (!producto_id) {
+    return res.status(400).json({ message: 'El ID del producto es obligatorio.' });
+  }
+
+  try {
+    // Obtener detalles del producto
+    const [producto] = await pool.query(
+      `SELECT 
+        p.producto_id,
+        p.producto_nombre AS nombre,
+        p.producto_precio_venta,
+        p.producto_precio_oferta,
+        p.producto_precio_costo,
+        p.producto_sku,
+        p.producto_descripcion,
+        COALESCE(SUM(s.cantidad), 0) AS stock_total,
+        ip.imagen_id AS imagen_id,
+        ip.imagen_url
+      FROM productos p
+      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id
+      LEFT JOIN stock s ON s.producto_id = p.producto_id
+      WHERE p.producto_id = ?
+      GROUP BY p.producto_id, ip.imagen_id, ip.imagen_url`
+      , [producto_id]
+    );
+
+    if (producto.length === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado.' });
+    }
+
+    // Obtener detalles de las variantes (si existen)
+    const [variantes] = await pool.query(
+      `SELECT 
+        v.variante_id,
+        v.variante_precio_venta,
+        v.variante_precio_oferta,
+        v.variante_precio_costo,
+        v.variante_sku,
+        COALESCE(s.cantidad, 0) AS stock_total,
+        ip.imagen_id AS imagen_id,
+        ip.imagen_url,
+        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
+      FROM variantes v
+      LEFT JOIN stock s ON s.variante_id = v.variante_id
+      LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
+      LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
+      LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
+      WHERE v.producto_id = ?
+      GROUP BY v.variante_id, ip.imagen_id, ip.imagen_url`
+      , [producto_id]
+    );
+
+    res.status(200).json({ producto: producto[0], variantes });
+  } catch (error) {
+    console.error('Error al obtener producto por ID:', error);
+    res.status(500).json({ message: 'Error interno al obtener el producto.' });
+  }
+};
+
+export const actualizarProducto = async (req, res) => {
+  const { producto_id } = req.params;
+  const {
+    producto_nombre,
+    categoria_id,
+    producto_descripcion,
+    producto_precio_venta,
+    producto_precio_costo,
+    producto_precio_oferta,
+    producto_sku,
+    producto_stock,
+    imagenes,
+    variantes,
+  } = req.body;
+
+  if (!producto_nombre || !categoria_id) {
+    return res.status(400).json({ message: 'El nombre del producto y la categoría son obligatorios.' });
+  }
+
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    // Actualizar el producto
+    await conn.query(
+      `UPDATE productos SET 
+        producto_nombre = ?, 
+        categoria_id = ?, 
+        producto_descripcion = ?, 
+        producto_precio_venta = ?, 
+        producto_precio_costo = ?, 
+        producto_precio_oferta = ?, 
+        producto_sku = ? 
+      WHERE producto_id = ?`,
+      [
+        producto_nombre,
+        categoria_id,
+        producto_descripcion || null,
+        producto_precio_venta || null,
+        producto_precio_costo || null,
+        producto_precio_oferta || null,
+        producto_sku || null,
+        producto_id,
+      ]
+    );
+
+    // Actualizar el stock del producto
+    if (producto_stock !== undefined) {
+      await conn.query(
+        `UPDATE stock SET cantidad = ? WHERE producto_id = ?`,
+        [producto_stock, producto_id]
+      );
+    }
+
+    // Actualizar imágenes del producto
+    if (imagenes && imagenes.length > 0) {
+      await conn.query(`DELETE FROM imagenes_productos WHERE producto_id = ?`, [producto_id]);
+
+      const imagenQueries = imagenes.map((imagen, index) =>
+        conn.query(
+          `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
+          [producto_id, imagen.url, index]
+        )
+      );
+      await Promise.all(imagenQueries);
+    }
+
+    // Actualizar variantes
+    if (variantes && variantes.length > 0) {
+      for (const variante of variantes) {
+        await conn.query(
+          `UPDATE variantes SET 
+            variante_precio_venta = ?, 
+            variante_precio_costo = ?, 
+            variante_precio_oferta = ?, 
+            variante_sku = ? 
+          WHERE variante_id = ?`,
+          [
+            variante.precio_venta || null,
+            variante.precio_costo || null,
+            variante.precio_oferta || null,
+            variante.sku || null,
+            variante.variante_id,
+          ]
+        );
+
+        // Actualizar stock de la variante
+        if (variante.stock !== undefined) {
+          await conn.query(
+            `UPDATE stock SET cantidad = ? WHERE variante_id = ?`,
+            [variante.stock, variante.variante_id]
+          );
+        }
+
+        // Actualizar imagen de la variante
+        if (variante.imagen_id) {
+          await conn.query(
+            `UPDATE variantes SET imagen_id = ? WHERE variante_id = ?`,
+            [variante.imagen_id, variante.variante_id]
+          );
+        }
+      }
+    }
+
+    await conn.commit();
+    res.status(200).json({ message: 'Producto actualizado exitosamente.' });
+  } catch (error) {
+    await conn.rollback();
+    console.error('Error al actualizar producto:', error);
+    res.status(500).json({ message: 'Error interno al actualizar el producto.' });
+  } finally {
+    conn.release();
+  }
+};
+

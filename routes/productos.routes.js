@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 
 const router = Router();
@@ -46,6 +46,12 @@ router.put('/cambiar-visibilidad', authenticate, cambiarVisibilidadProducto);
 
 // Ruta para obtener detalles del stock de un producto específico
 router.get('/detalles-stock/:producto_id', authenticate, obtenerDetallesStock);
+
+// Ruta para obtener un producto por ID
+router.get('/:producto_id', authenticate, obtenerProductoPorId); 
+
+// Ruta para actualizar un producto
+router.put('/:producto_id', authenticate, actualizarProducto);
 
 
 export default router;
