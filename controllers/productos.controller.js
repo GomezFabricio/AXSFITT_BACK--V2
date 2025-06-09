@@ -451,3 +451,66 @@ export const cambiarVisibilidadProducto = async (req, res) => {
     res.status(500).json({ message: 'Error interno al cambiar visibilidad del producto.' });
   }
 };
+
+export const obtenerDetallesStock = async (req, res) => {
+  const { producto_id } = req.params;
+
+  if (!producto_id) {
+    return res.status(400).json({ message: 'El ID del producto es obligatorio.' });
+  }
+
+  try {
+    // Obtener detalles del producto
+    const [producto] = await pool.query(
+      `SELECT 
+        p.producto_id,
+        p.producto_nombre AS nombre,
+        p.producto_precio_venta,
+        p.producto_precio_oferta,
+        p.producto_sku,
+        p.producto_descripcion,
+        ip.imagen_url,
+        COALESCE(SUM(s.cantidad), 0) AS stock_total
+      FROM productos p
+      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
+        SELECT MIN(imagen_orden) 
+        FROM imagenes_productos 
+        WHERE producto_id = p.producto_id
+      )
+      LEFT JOIN stock s ON s.producto_id = p.producto_id
+      WHERE p.producto_id = ?
+      GROUP BY p.producto_id, ip.imagen_url`
+      , [producto_id]
+    );
+
+    if (producto.length === 0) {
+      return res.status(404).json({ message: 'Producto no encontrado.' });
+    }
+
+    // Obtener detalles de las variantes (si existen)
+    const [variantes] = await pool.query(
+      `SELECT 
+        v.variante_id,
+        v.variante_precio_venta,
+        v.variante_precio_oferta,
+        v.variante_sku,
+        v.variante_estado,
+        COALESCE(s.cantidad, 0) AS stock_total,
+        ip.imagen_url,
+        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
+      FROM variantes v
+      LEFT JOIN stock s ON s.variante_id = v.variante_id
+      LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
+      LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
+      LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
+      WHERE v.producto_id = ?
+      GROUP BY v.variante_id, ip.imagen_url`
+      , [producto_id]
+    );
+
+    res.status(200).json({ producto: producto[0], variantes });
+  } catch (error) {
+    console.error('Error al obtener detalles de stock:', error);
+    res.status(500).json({ message: 'Error interno al obtener detalles de stock.' });
+  }
+};
