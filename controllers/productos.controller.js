@@ -525,7 +525,7 @@ export const obtenerProductoPorId = async (req, res) => {
 
   try {
     // Obtener los datos principales del producto
-    const [producto] = await pool.query(
+    const [productoRows] = await pool.query(
       `SELECT 
         p.producto_id,
         p.producto_nombre AS nombre,
@@ -536,71 +536,97 @@ export const obtenerProductoPorId = async (req, res) => {
         p.producto_descripcion,
         p.categoria_id,
         c.categoria_nombre,
-        COALESCE(SUM(s.cantidad), 0) AS stock_total,
-        GROUP_CONCAT(ip.imagen_url ORDER BY ip.imagen_orden ASC) AS imagenes
+        COALESCE(SUM(s.cantidad), 0) AS stock_total
       FROM productos p
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
-      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id
       LEFT JOIN stock s ON s.producto_id = p.producto_id
       WHERE p.producto_id = ?
-      GROUP BY p.producto_id, c.categoria_nombre`,
+      GROUP BY p.producto_id`,
       [producto_id]
     );
 
-    if (producto.length === 0) {
+    if (productoRows.length === 0) {
       return res.status(404).json({ message: 'Producto no encontrado.' });
     }
 
-    // Procesar las imágenes del producto
-    producto[0].imagenes = producto[0].imagenes ? producto[0].imagenes.split(',') : [];
+    const producto = productoRows[0];
 
-    // Obtener las variantes del producto
-    const [variantes] = await pool.query(
+    // Obtener las imágenes del producto
+    const [imagenes] = await pool.query(
       `SELECT 
-        v.variante_id,
-        v.variante_precio_venta,
-        v.variante_precio_oferta,
-        v.variante_precio_costo,
-        v.variante_sku,
-        COALESCE(s.cantidad, 0) AS stock_total,
-        ip.imagen_url AS imagen_url,
-        GROUP_CONCAT(
-          CONCAT(
-            '{"atributo_nombre":"', a.atributo_nombre, '",',
-            '"valor_nombre":"', vv.valor_nombre, '"}'
-          )
-        ) AS atributos
-      FROM variantes v
-      LEFT JOIN stock s ON s.variante_id = v.variante_id
-      LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
-      LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
-      LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-      WHERE v.producto_id = ?
-      GROUP BY v.variante_id, ip.imagen_url`,
+         ip.imagen_id, 
+         ip.imagen_url, 
+         ip.imagen_orden 
+       FROM imagenes_productos ip 
+       WHERE ip.producto_id = ? 
+       ORDER BY ip.imagen_orden ASC`,
       [producto_id]
     );
 
-    // Procesar los atributos de las variantes
-    variantes.forEach((variante) => {
-      if (variante.atributos) {
-        try {
-          variante.atributos = JSON.parse(`[${variante.atributos}]`);
-        } catch (error) {
-          console.error('Error al parsear atributos:', error);
-          variante.atributos = [];
-        }
-      } else {
-        variante.atributos = [];
+    producto.imagenes = imagenes;
+
+    // Obtener las variantes del producto
+    const [variantesRaw] = await pool.query(
+      `SELECT 
+         v.variante_id,
+         v.variante_precio_venta,
+         v.variante_precio_oferta,
+         v.variante_precio_costo,
+         v.variante_sku,
+         v.imagen_id,
+         ip.imagen_url AS imagen_url,
+         COALESCE(s.cantidad, 0) AS stock_total
+       FROM variantes v
+       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
+       LEFT JOIN stock s ON s.variante_id = v.variante_id
+       WHERE v.producto_id = ?`,
+      [producto_id]
+    );
+
+    // Obtener atributos de todas las variantes
+    const [atributosRaw] = await pool.query(
+      `SELECT 
+         vv.variante_id,
+         a.atributo_nombre,
+         vv.valor_nombre
+       FROM valores_variantes vv
+       JOIN atributos a ON a.atributo_id = vv.atributo_id
+       WHERE vv.variante_id IN (
+         SELECT variante_id FROM variantes WHERE producto_id = ?
+       )`,
+      [producto_id]
+    );
+
+    // Armar un diccionario de atributos por variante
+    const atributosPorVariante = {};
+    for (const attr of atributosRaw) {
+      if (!atributosPorVariante[attr.variante_id]) {
+        atributosPorVariante[attr.variante_id] = [];
       }
+      atributosPorVariante[attr.variante_id].push({
+        atributo_nombre: attr.atributo_nombre,
+        valor_nombre: attr.valor_nombre,
+      });
+    }
+
+    // Mezclar los atributos con las variantes
+    const variantes = variantesRaw.map((v) => ({
+      ...v,
+      atributos: atributosPorVariante[v.variante_id] || [],
+    }));
+
+    // Enviar la respuesta final
+    res.status(200).json({
+      producto,
+      variantes,
     });
 
-    // Enviar la respuesta al cliente
-    res.status(200).json({ producto: producto[0], variantes });
   } catch (error) {
     console.error('Error al obtener producto por ID:', error);
     res.status(500).json({ message: 'Error interno al obtener el producto.' });
   }
 };
+
 
 export const actualizarProducto = async (req, res) => {
   const { producto_id } = req.params;
@@ -792,6 +818,7 @@ export const actualizarProducto = async (req, res) => {
 
 export const moverImagenProducto = async (req, res) => {
   const { producto_id, imagen_id, nuevo_orden } = req.body;
+  console.log('Datos recibidos en moverImagenProducto:', req.body);
 
   if (!producto_id || !imagen_id || nuevo_orden === undefined) {
     return res.status(400).json({ message: 'El producto, la imagen y el nuevo orden son obligatorios.' });
