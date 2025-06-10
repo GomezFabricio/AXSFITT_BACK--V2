@@ -625,7 +625,7 @@ export const actualizarProducto = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Actualizar el producto
+    // Actualizar los datos principales del producto
     await conn.query(
       `UPDATE productos SET 
         producto_nombre = ?, 
@@ -648,61 +648,133 @@ export const actualizarProducto = async (req, res) => {
       ]
     );
 
-    // Actualizar el stock del producto
-    if (producto_stock !== undefined) {
-      await conn.query(
-        `UPDATE stock SET cantidad = ? WHERE producto_id = ?`,
-        [producto_stock, producto_id]
-      );
-    }
-
     // Actualizar imágenes del producto
     if (imagenes && imagenes.length > 0) {
-      await conn.query(`DELETE FROM imagenes_productos WHERE producto_id = ?`, [producto_id]);
+      const imagenesValidas = imagenes.filter((imagen) => imagen.url && imagen.url.trim() !== '');
 
-      const imagenQueries = imagenes.map((imagen, index) =>
-        conn.query(
-          `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
-          [producto_id, imagen.imagen_url, index]
+      if (imagenesValidas.length > 0) {
+        await conn.query(`DELETE FROM imagenes_productos WHERE producto_id = ?`, [producto_id]);
 
-        )
-      );
-      await Promise.all(imagenQueries);
+        const imagenQueries = imagenesValidas.map((imagen, index) =>
+          conn.query(
+            `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
+            [producto_id, imagen.url, index]
+          )
+        );
+        await Promise.all(imagenQueries);
+      }
     }
 
     // Actualizar variantes
     if (variantes && variantes.length > 0) {
-      for (const variante of variantes) {
+      // Eliminar variantes que no están en la lista enviada
+      const varianteIdsEnviadas = variantes.map((variante) => variante.variante_id).filter((id) => id !== undefined);
+      if (varianteIdsEnviadas.length > 0) {
         await conn.query(
-          `UPDATE variantes SET 
-            variante_precio_venta = ?, 
-            variante_precio_costo = ?, 
-            variante_precio_oferta = ?, 
-            variante_sku = ? 
-          WHERE variante_id = ?`,
-          [
-            variante.precio_venta || null,
-            variante.precio_costo || null,
-            variante.precio_oferta || null,
-            variante.sku || null,
-            variante.variante_id,
-          ]
+          `DELETE FROM variantes WHERE producto_id = ? AND variante_id NOT IN (?)`,
+          [producto_id, varianteIdsEnviadas]
         );
+      } else {
+        // Si no se envió ninguna variante, eliminar todas las variantes del producto
+        await conn.query(`DELETE FROM variantes WHERE producto_id = ?`, [producto_id]);
+      }
 
-        // Actualizar stock de la variante
-        if (variante.stock !== undefined) {
-          await conn.query(
-            `UPDATE stock SET cantidad = ? WHERE variante_id = ?`,
-            [variante.stock, variante.variante_id]
+      for (const variante of variantes) {
+        // Obtener el ID de la imagen asociada a la variante
+        let imagen_id = null;
+        if (variante.imagen_url) {
+          const [imagenResult] = await conn.query(
+            `SELECT imagen_id FROM imagenes_productos WHERE producto_id = ? AND imagen_url = ?`,
+            [producto_id, variante.imagen_url]
           );
+          if (imagenResult.length > 0) {
+            imagen_id = imagenResult[0].imagen_id;
+          }
         }
 
-        // Actualizar imagen de la variante
-        if (variante.imagen_id) {
+        // Actualizar o insertar la variante
+        if (variante.variante_id) {
           await conn.query(
-            `UPDATE variantes SET imagen_id = ? WHERE variante_id = ?`,
-            [variante.imagen_id, variante.variante_id]
+            `UPDATE variantes SET 
+              variante_precio_venta = ?, 
+              variante_precio_costo = ?, 
+              variante_precio_oferta = ?, 
+              variante_sku = ?, 
+              imagen_id = ? 
+            WHERE variante_id = ?`,
+            [
+              variante.precio_venta || null,
+              variante.precio_costo || null,
+              variante.precio_oferta || null,
+              variante.sku || null,
+              imagen_id,
+              variante.variante_id,
+            ]
           );
+        } else {
+          const [varianteResult] = await conn.query(
+            `INSERT INTO variantes (
+              producto_id, 
+              imagen_id, 
+              variante_precio_venta, 
+              variante_precio_costo, 
+              variante_precio_oferta, 
+              variante_sku
+            ) VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+              producto_id,
+              imagen_id,
+              variante.precio_venta || null,
+              variante.precio_costo || null,
+              variante.precio_oferta || null,
+              variante.sku || null,
+            ]
+          );
+          variante.variante_id = varianteResult.insertId;
+        }
+
+        // Actualizar el stock de la variante
+        if (variante.stock !== undefined) {
+          const stockCantidad = variante.stock !== null ? variante.stock : 0;
+
+          const [stockExistente] = await conn.query(
+            `SELECT stock_id FROM stock WHERE variante_id = ?`,
+            [variante.variante_id]
+          );
+
+          if (stockExistente.length > 0) {
+            await conn.query(
+              `UPDATE stock SET cantidad = ? WHERE variante_id = ?`,
+              [stockCantidad, variante.variante_id]
+            );
+          } else {
+            await conn.query(
+              `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
+              [variante.variante_id, stockCantidad]
+            );
+          }
+        }
+
+        // Actualizar los valores de atributos de la variante
+        if (variante.valores && variante.valores.length > 0) {
+          await conn.query(
+            `DELETE FROM valores_variantes WHERE variante_id = ?`,
+            [variante.variante_id]
+          );
+
+          for (const valor of variante.valores) {
+            const [atributo] = await conn.query(
+              `SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?`,
+              [producto_id, valor.atributo_nombre]
+            );
+
+            if (atributo.length > 0) {
+              await conn.query(
+                `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
+                [variante.variante_id, atributo[0].atributo_id, valor.valor_nombre]
+              );
+            }
+          }
         }
       }
     }
@@ -717,4 +789,3 @@ export const actualizarProducto = async (req, res) => {
     conn.release();
   }
 };
-

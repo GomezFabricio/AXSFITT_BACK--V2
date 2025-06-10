@@ -22,19 +22,19 @@ const upload = multer({ storage });
 router.post('/', authenticate, validarPermisos('Agregar Producto'), crearProducto);
 
 // Ruta para guardar imágenes en la tabla temporal
-router.post('/imagenes-temporales', authenticate, validarPermisos('Agregar Producto'), upload.single('file'), guardarImagenTemporal);
+router.post('/imagenes-temporales', authenticate, upload.single('file'), guardarImagenTemporal);
 
 // Ruta para obtener imágenes temporales
-router.get('/imagenes-temporales/:usuario_id', authenticate, validarPermisos('Agregar Producto'), obtenerImagenesTemporales);
+router.get('/imagenes-temporales/:usuario_id', authenticate, obtenerImagenesTemporales);
 
 // Ruta para mover una imagen temporal a una nueva posición
-router.put('/imagenes-temporales/mover', authenticate, validarPermisos('Agregar Producto'), moverImagenTemporal);
+router.put('/imagenes-temporales/mover', authenticate, moverImagenTemporal);
 
 // Ruta para eliminar una imagen temporal
-router.delete('/imagenes-temporales', authenticate, validarPermisos('Agregar Producto'), eliminarImagenTemporal);
+router.delete('/imagenes-temporales', authenticate, eliminarImagenTemporal);
 
 // Ruta para cancelar el proceso de alta del producto
-router.post('/cancelar-proceso-alta', authenticate, validarPermisos('Agregar Producto'), cancelarProcesoAltaProducto);
+router.post('/cancelar-proceso-alta', authenticate, cancelarProcesoAltaProducto);
 
 // Ruta para obtener todos los productos
 router.get('/', authenticate, validarPermisos('Ver Productos'), obtenerProductos);

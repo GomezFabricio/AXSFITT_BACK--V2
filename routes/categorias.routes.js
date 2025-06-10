@@ -6,7 +6,7 @@ import validarPermisos from '../middlewares/validarPermiso.js';
 const router = Router();
 
 // Obtener todas las categorías activas
-router.get('/', authenticate, validarPermisos('Ver Categorias'), getAllCategorias);
+router.get('/', authenticate, getAllCategorias);
 
 // Crear una nueva categoría (padre o subcategoría si categoria_padre_id en body)
 router.post('/', authenticate, validarPermisos('Agregar Categoria'), crearCategoria);
