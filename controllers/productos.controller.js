@@ -524,7 +524,7 @@ export const obtenerProductoPorId = async (req, res) => {
   }
 
   try {
-    // Obtener detalles del producto
+    // Obtener los datos principales del producto
     const [producto] = await pool.query(
       `SELECT 
         p.producto_id,
@@ -535,22 +535,26 @@ export const obtenerProductoPorId = async (req, res) => {
         p.producto_sku,
         p.producto_descripcion,
         p.categoria_id,
+        c.categoria_nombre,
         COALESCE(SUM(s.cantidad), 0) AS stock_total,
-        ip.imagen_id AS imagen_id,
-        ip.imagen_url
+        GROUP_CONCAT(ip.imagen_url ORDER BY ip.imagen_orden ASC) AS imagenes
       FROM productos p
+      LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
       LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id
       LEFT JOIN stock s ON s.producto_id = p.producto_id
       WHERE p.producto_id = ?
-      GROUP BY p.producto_id, ip.imagen_id, ip.imagen_url`
-      , [producto_id]
+      GROUP BY p.producto_id, c.categoria_nombre`,
+      [producto_id]
     );
 
     if (producto.length === 0) {
       return res.status(404).json({ message: 'Producto no encontrado.' });
     }
 
-    // Obtener detalles de las variantes (si existen)
+    // Procesar las imágenes del producto
+    producto[0].imagenes = producto[0].imagenes ? producto[0].imagenes.split(',') : [];
+
+    // Obtener las variantes del producto
     const [variantes] = await pool.query(
       `SELECT 
         v.variante_id,
@@ -559,19 +563,38 @@ export const obtenerProductoPorId = async (req, res) => {
         v.variante_precio_costo,
         v.variante_sku,
         COALESCE(s.cantidad, 0) AS stock_total,
-        ip.imagen_id AS imagen_id,
-        ip.imagen_url,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
+        ip.imagen_url AS imagen_url,
+        GROUP_CONCAT(
+          CONCAT(
+            '{"atributo_nombre":"', a.atributo_nombre, '",',
+            '"valor_nombre":"', vv.valor_nombre, '"}'
+          )
+        ) AS atributos
       FROM variantes v
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
       WHERE v.producto_id = ?
-      GROUP BY v.variante_id, ip.imagen_id, ip.imagen_url`
-      , [producto_id]
+      GROUP BY v.variante_id, ip.imagen_url`,
+      [producto_id]
     );
 
+    // Procesar los atributos de las variantes
+    variantes.forEach((variante) => {
+      if (variante.atributos) {
+        try {
+          variante.atributos = JSON.parse(`[${variante.atributos}]`);
+        } catch (error) {
+          console.error('Error al parsear atributos:', error);
+          variante.atributos = [];
+        }
+      } else {
+        variante.atributos = [];
+      }
+    });
+
+    // Enviar la respuesta al cliente
     res.status(200).json({ producto: producto[0], variantes });
   } catch (error) {
     console.error('Error al obtener producto por ID:', error);
