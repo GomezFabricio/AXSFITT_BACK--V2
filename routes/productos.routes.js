@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
+import validarPermisos from '../middlewares/validarPermiso.js';
 
 const router = Router();
 
@@ -18,40 +19,39 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Ruta para crear un producto
-router.post('/', authenticate, crearProducto);
+router.post('/', authenticate, validarPermisos('Agregar Producto'), crearProducto);
 
 // Ruta para guardar imágenes en la tabla temporal
-router.post('/imagenes-temporales', authenticate, upload.single('file'), guardarImagenTemporal);
+router.post('/imagenes-temporales', authenticate, validarPermisos('Agregar Producto'), upload.single('file'), guardarImagenTemporal);
 
 // Ruta para obtener imágenes temporales
-router.get('/imagenes-temporales/:usuario_id', authenticate, obtenerImagenesTemporales);
+router.get('/imagenes-temporales/:usuario_id', authenticate, validarPermisos('Agregar Producto'), obtenerImagenesTemporales);
 
 // Ruta para mover una imagen temporal a una nueva posición
-router.put('/imagenes-temporales/mover', authenticate, moverImagenTemporal);
+router.put('/imagenes-temporales/mover', authenticate, validarPermisos('Agregar Producto'), moverImagenTemporal);
 
 // Ruta para eliminar una imagen temporal
-router.delete('/imagenes-temporales', authenticate, eliminarImagenTemporal);
+router.delete('/imagenes-temporales', authenticate, validarPermisos('Agregar Producto'), eliminarImagenTemporal);
 
 // Ruta para cancelar el proceso de alta del producto
-router.post('/cancelar-proceso-alta', authenticate, cancelarProcesoAltaProducto);
+router.post('/cancelar-proceso-alta', authenticate, validarPermisos('Agregar Producto'), cancelarProcesoAltaProducto);
 
 // Ruta para obtener todos los productos
-router.get('/', authenticate, obtenerProductos);
+router.get('/', authenticate, validarPermisos('Ver Productos'), obtenerProductos);
 
 // Ruta para eliminar un producto (baja lógica)
-router.delete('/:producto_id', authenticate, eliminarProducto);
+router.delete('/:producto_id', authenticate, validarPermisos('Eliminar Producto'), eliminarProducto);
 
 // Ruta para cambiar la visibilidad de un producto
-router.put('/cambiar-visibilidad', authenticate, cambiarVisibilidadProducto);
+router.put('/cambiar-visibilidad', authenticate, validarPermisos('Modificar Producto'), cambiarVisibilidadProducto);
 
 // Ruta para obtener detalles del stock de un producto específico
-router.get('/detalles-stock/:producto_id', authenticate, obtenerDetallesStock);
+router.get('/detalles-stock/:producto_id', authenticate, validarPermisos('Ver Productos'), obtenerDetallesStock);
 
 // Ruta para obtener un producto por ID
-router.get('/:producto_id', authenticate, obtenerProductoPorId); 
+router.get('/:producto_id', authenticate, validarPermisos('Ver Productos'), obtenerProductoPorId);
 
 // Ruta para actualizar un producto
-router.put('/:producto_id', authenticate, actualizarProducto);
-
+router.put('/:producto_id', authenticate, validarPermisos('Modificar Producto'), actualizarProducto);
 
 export default router;

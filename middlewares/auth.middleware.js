@@ -1,28 +1,28 @@
 import { SECRET_KEY } from '../config.js';
 import jwt from 'jsonwebtoken';
+import { getUsuarioConPermisos } from '../services/usuario.service.js'; // Importar desde el servicio
 
-// Función para verificar y autenticar el token
-const authenticate = (req, res, next) => {
-    // Obtener el token del encabezado 'Authorization'
+const authenticate = async (req, res, next) => {
     const token = req.headers['authorization']?.split(' ')[1];
 
-    // Si no hay token, enviar respuesta de acceso no autorizado
     if (!token) {
         return res.status(401).json({ message: 'Acceso no autorizado. Token no proporcionado.' });
     }
 
-    // Verificar el token
-    jwt.verify(token, SECRET_KEY, (err, decoded) => {
-        if (err) {
-            return res.status(403).json({ message: 'Token no válido.' });
+    try {
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const usuario = await getUsuarioConPermisos(decoded.usuario_id); // Obtener usuario y permisos desde el servicio
+
+        if (!usuario) {
+            return res.status(401).json({ message: 'Usuario no encontrado.' });
         }
 
-        // Almacenar el token decodificado en la solicitud para su uso posterior
-        req.user = decoded;
-
-        // Continuar al siguiente middleware o controlador
+        req.user = usuario; // Guardar usuario y permisos en la solicitud
         next();
-    });
+    } catch (error) {
+        console.error('Error en la autenticación:', error);
+        return res.status(403).json({ message: 'Token no válido.' });
+    }
 };
 
 export default authenticate;

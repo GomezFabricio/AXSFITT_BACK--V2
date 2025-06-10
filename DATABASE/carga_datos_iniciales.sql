@@ -60,7 +60,9 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (4, 'Eliminar Categoria', NULL, FALSE),                  -- 2.4
 (4, 'Agregar Producto', '/productos/agregar', TRUE),     -- 2.5
 (4, 'Definir Precio Producto', '/productos/definir-precio', FALSE), -- 2.6
-(4, 'Ver Productos', '/productos', TRUE);                -- 2.7
+(4, 'Modificar Producto', NULL, FALSE),                  -- 2.7
+(4, 'Eliminar Producto', NULL, FALSE),                   -- 2.8
+(4, 'Ver Productos', '/productos', TRUE);                -- 2.9
 
 -- Submódulo 2.8: Utilidades Productos
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -105,6 +107,8 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 4, 16),  -- Agregar Producto
 (1, 4, 17),  -- Ver Productos
 (1, 4, 18),  -- Definir Precio Producto
+(1, 4, (SELECT permiso_id FROM permisos WHERE permiso_descripcion = 'Modificar Producto')), -- 2.7
+(1, 4, (SELECT permiso_id FROM permisos WHERE permiso_descripcion = 'Eliminar Producto')),  -- 2.8
 (1, 5, 19),  -- Aumentar Precios
 (1, 5, 20),  -- Notificaciones de stock
 
