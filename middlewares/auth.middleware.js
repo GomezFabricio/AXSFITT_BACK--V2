@@ -13,6 +13,8 @@ const authenticate = async (req, res, next) => {
         const decoded = jwt.verify(token, SECRET_KEY);
         const usuario = await getUsuarioConPermisos(decoded.usuario_id); // Obtener usuario y permisos desde el servicio
 
+        //console.log('Usuario autenticado:', usuario); // Verificar los datos del usuario y permisos
+
         if (!usuario) {
             return res.status(401).json({ message: 'Usuario no encontrado.' });
         }

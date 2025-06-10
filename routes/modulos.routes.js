@@ -11,6 +11,6 @@ router.get('/', authenticate, validarPermisos('Ver Modulos'), listarModulos);
 router.put('/:modulo_id', authenticate, validarPermisos('Modificar Modulo'), modificarModulo);
 
 // Obtener permisos de módulos
-router.post('/permisos', authenticate, validarPermisos('Ver Permisos'), obtenerPermisosPorModulos);
+router.post('/permisos', authenticate, obtenerPermisosPorModulos);
 
 export default router;

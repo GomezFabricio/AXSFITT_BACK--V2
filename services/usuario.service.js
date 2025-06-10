@@ -14,12 +14,13 @@ export const getUsuarioConPermisos = async (usuario_id) => {
       return null; // Usuario sin perfiles
     }
 
-    // Obtener permisos asociados a los perfiles
+    // Obtener permisos asociados a los perfiles activos
     const [permisos] = await pool.query(
       `SELECT DISTINCT pm.permiso_descripcion
        FROM perfiles_modulos_permisos pmp
        JOIN permisos pm ON pmp.permiso_id = pm.permiso_id
-       WHERE pmp.perfil_id IN (?)`,
+       JOIN perfiles p ON pmp.perfil_id = p.perfil_id
+       WHERE pmp.perfil_id IN (?) AND p.perfil_estado = 'activo'`,
       [perfiles.map((perfil) => perfil.perfil_id)]
     );
 

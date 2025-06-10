@@ -64,10 +64,10 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (4, 'Eliminar Producto', NULL, FALSE),                   -- 2.8
 (4, 'Ver Productos', '/productos', TRUE);                -- 2.9
 
--- Submódulo 2.8: Utilidades Productos
+-- Submódulo 2.10: Utilidades Productos
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(5, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE),         -- 2.8.1
-(5, 'Notificaciones de stock', '/productos/utilidades/notificaciones-stock', TRUE); -- 2.8.2
+(5, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE),         -- 2.10.1
+(5, 'Notificaciones de stock', '/productos/utilidades/notificaciones-stock', TRUE); -- 2.10.2
 
 -- Módulo 3: Gestión de ventas
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -107,18 +107,18 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 4, 16),  -- Agregar Producto
 (1, 4, 17),  -- Ver Productos
 (1, 4, 18),  -- Definir Precio Producto
-(1, 4, (SELECT permiso_id FROM permisos WHERE permiso_descripcion = 'Modificar Producto')), -- 2.7
-(1, 4, (SELECT permiso_id FROM permisos WHERE permiso_descripcion = 'Eliminar Producto')),  -- 2.8
-(1, 5, 19),  -- Aumentar Precios
-(1, 5, 20),  -- Notificaciones de stock
+(1, 4, 19),  -- Modificar Producto
+(1, 4, 20),  -- Eliminar Producto
+(1, 5, 21),  -- Aumentar Precios
+(1, 5, 22),  -- Notificaciones de stock
 
 -- Gestión de ventas
-(1, 6, 21),  -- Listado de Ventas
-(1, 6, 22),  -- Agregar Venta
-(1, 6, 23),  -- Clientes
-(1, 6, 24),  -- Metricas
-(1, 6, 25),  -- Metodos de Pago
-(1, 6, 26),  -- Metodos de Envio
-(1, 6, 27),  -- Logistica
-(1, 7, 28),  -- Ofertas
-(1, 7, 29);  -- Cupones de Descuento
+(1, 6, 23),  -- Listado de Ventas
+(1, 6, 24),  -- Agregar Venta
+(1, 6, 25),  -- Clientes
+(1, 6, 26),  -- Metricas
+(1, 6, 27),  -- Metodos de Pago
+(1, 6, 28),  -- Metodos de Envio
+(1, 6, 29),  -- Logistica
+(1, 7, 30),  -- Ofertas
+(1, 7, 31);  -- Cupones de Descuento
