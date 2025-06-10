@@ -58,6 +58,6 @@ router.put('/:producto_id', authenticate, validarPermisos('Modificar Producto'),
 router.put('/imagenes/mover', authenticate, validarPermisos('Modificar Producto'), moverImagenProducto);
 
 // Ruta para eliminar una imagen de un producto
-router.delete('/imagenes', authenticate, validarPermisos('Modificar Producto'), eliminarImagenProducto);
+router.delete('/:producto_id/imagenes/:imagen_id', authenticate, validarPermisos('Modificar Producto'), eliminarImagenProducto);
 
 export default router;

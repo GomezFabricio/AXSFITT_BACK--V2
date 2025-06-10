@@ -883,7 +883,9 @@ export const moverImagenProducto = async (req, res) => {
 };
 
 export const eliminarImagenProducto = async (req, res) => {
-  const { producto_id, imagen_id } = req.body;
+  const { producto_id, imagen_id } = req.params;
+
+  console.log('Datos recibidos en eliminarImagenProducto CONTROLLER:', { producto_id, imagen_id });
 
   if (!producto_id || !imagen_id) {
     return res.status(400).json({ message: 'El producto y la imagen son obligatorios.' });
