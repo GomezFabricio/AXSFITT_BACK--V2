@@ -789,3 +789,108 @@ export const actualizarProducto = async (req, res) => {
     conn.release();
   }
 };
+
+export const moverImagenProducto = async (req, res) => {
+  const { producto_id, imagen_id, nuevo_orden } = req.body;
+
+  if (!producto_id || !imagen_id || nuevo_orden === undefined) {
+    return res.status(400).json({ message: 'El producto, la imagen y el nuevo orden son obligatorios.' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // Obtener la imagen actual
+    const [imagenActual] = await conn.query(
+      `SELECT imagen_orden FROM imagenes_productos WHERE producto_id = ? AND imagen_id = ?`,
+      [producto_id, imagen_id]
+    );
+
+    if (imagenActual.length === 0) {
+      await conn.rollback();
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    const ordenActual = imagenActual[0].imagen_orden;
+
+    // Si el nuevo orden es igual al actual, no hacer nada
+    if (ordenActual === nuevo_orden) {
+      await conn.rollback();
+      return res.status(200).json({ message: 'El orden ya está actualizado.' });
+    }
+
+    // Ajustar los órdenes de las demás imágenes
+    if (ordenActual < nuevo_orden) {
+      // Mover hacia abajo: reducir el orden de las imágenes entre el rango
+      await conn.query(
+        `UPDATE imagenes_productos 
+         SET imagen_orden = imagen_orden - 1 
+         WHERE producto_id = ? AND imagen_orden > ? AND imagen_orden <= ?`,
+        [producto_id, ordenActual, nuevo_orden]
+      );
+    } else {
+      // Mover hacia arriba: incrementar el orden de las imágenes entre el rango
+      await conn.query(
+        `UPDATE imagenes_productos 
+         SET imagen_orden = imagen_orden + 1 
+         WHERE producto_id = ? AND imagen_orden >= ? AND imagen_orden < ?`,
+        [producto_id, nuevo_orden, ordenActual]
+      );
+    }
+
+    // Actualizar el orden de la imagen seleccionada
+    await conn.query(
+      `UPDATE imagenes_productos 
+       SET imagen_orden = ? 
+       WHERE producto_id = ? AND imagen_id = ?`,
+      [nuevo_orden, producto_id, imagen_id]
+    );
+
+    await conn.commit();
+    res.status(200).json({ message: 'Orden de la imagen actualizado correctamente.' });
+  } catch (error) {
+    console.error('Error al mover imagen del producto:', error);
+    res.status(500).json({ message: 'Error interno al mover la imagen.' });
+  }
+};
+
+export const eliminarImagenProducto = async (req, res) => {
+  const { producto_id, imagen_id } = req.body;
+
+  if (!producto_id || !imagen_id) {
+    return res.status(400).json({ message: 'El producto y la imagen son obligatorios.' });
+  }
+
+  try {
+    const conn = await pool.getConnection();
+
+    // Obtener la URL de la imagen desde la base de datos
+    const [imagen] = await conn.query(
+      `SELECT imagen_url FROM imagenes_productos WHERE producto_id = ? AND imagen_id = ?`,
+      [producto_id, imagen_id]
+    );
+
+    if (imagen.length === 0) {
+      return res.status(404).json({ message: 'Imagen no encontrada.' });
+    }
+
+    const imagenUrl = imagen[0].imagen_url;
+
+    // Eliminar la imagen de la base de datos
+    await conn.query(`DELETE FROM imagenes_productos WHERE producto_id = ? AND imagen_id = ?`, [producto_id, imagen_id]);
+
+    // Eliminar la imagen del sistema de archivos
+    const filePath = path.join('uploads', path.basename(imagenUrl));
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error('Error al eliminar la imagen del sistema de archivos:', err);
+      }
+    });
+
+    res.status(200).json({ message: 'Imagen eliminada correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar imagen del producto:', error);
+    res.status(500).json({ message: 'Error interno al eliminar la imagen.' });
+  }
+};

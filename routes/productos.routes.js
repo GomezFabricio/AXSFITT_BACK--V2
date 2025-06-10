@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
 
@@ -53,5 +53,11 @@ router.get('/:producto_id', authenticate, validarPermisos('Ver Productos'), obte
 
 // Ruta para actualizar un producto
 router.put('/:producto_id', authenticate, validarPermisos('Modificar Producto'), actualizarProducto);
+
+// Ruta para mover una imagen de un producto
+router.put('/imagenes/mover', authenticate, validarPermisos('Modificar Producto'), moverImagenProducto);
+
+// Ruta para eliminar una imagen de un producto
+router.delete('/imagenes', authenticate, validarPermisos('Modificar Producto'), eliminarImagenProducto);
 
 export default router;
