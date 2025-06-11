@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto, subirImagenProducto, eliminarImagenesNuevas } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto, subirImagenProducto, eliminarImagenesNuevas, cambiarEstadoVariante, verificarVentasVariante } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
 
@@ -65,6 +65,12 @@ router.post('/:producto_id/imagenes', authenticate, validarPermisos('Modificar P
 
 // Ruta para cancelar el proceso de alta del producto y eliminar imágenes nuevas
 router.post('/:producto_id/cancelar-imagenes', authenticate, validarPermisos('Modificar Producto'), eliminarImagenesNuevas);
+
+// Ruta para cambiar el estado de una variante de producto
+router.put('/variantes/estado', authenticate, validarPermisos('Modificar Producto'), cambiarEstadoVariante);
+
+// Ruta para verificar si una variante tiene ventas
+router.get('/variantes/:variante_id/ventas', authenticate, validarPermisos('Modificar Producto'), verificarVentasVariante);
 
 
 export default router;

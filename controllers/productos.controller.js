@@ -961,7 +961,7 @@ export const eliminarImagenesNuevas = async (req, res) => {
   if (imagenes.length === 0) {
     return res.status(200).json({ message: 'No hay imágenes nuevas para eliminar.' });
   }
-  
+
   try {
     const conn = await pool.getConnection();
 
@@ -986,5 +986,50 @@ export const eliminarImagenesNuevas = async (req, res) => {
   } catch (error) {
     console.error('Error al eliminar imágenes nuevas:', error);
     res.status(500).json({ message: 'Error interno al eliminar las imágenes.' });
+  }
+};
+
+export const verificarVentasVariante = async (req, res) => {
+  const { variante_id } = req.params;
+
+  if (!variante_id) {
+    return res.status(400).json({ message: 'El ID de la variante es obligatorio.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `SELECT COUNT(*) AS total FROM ventas_detalle WHERE vd_variante_id = ?`,
+      [variante_id]
+    );
+
+    const tieneVentas = result[0].total > 0;
+    res.status(200).json({ tieneVentas });
+  } catch (error) {
+    console.error('Error al verificar ventas de variante:', error);
+    res.status(500).json({ message: 'Error interno al verificar ventas.' });
+  }
+};
+
+export const cambiarEstadoVariante = async (req, res) => {
+  const { variante_id, estado } = req.body;
+
+  if (!variante_id || !['activo', 'inactivo'].includes(estado)) {
+    return res.status(400).json({ message: 'Datos inválidos: se requiere variante_id y un estado válido.' });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `UPDATE variantes SET variante_estado = ? WHERE variante_id = ?`,
+      [estado, variante_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Variante no encontrada.' });
+    }
+
+    res.status(200).json({ message: `Variante ${estado === 'activo' ? 'activada' : 'deshabilitada'} correctamente.` });
+  } catch (error) {
+    console.error('Error al cambiar estado de variante:', error);
+    res.status(500).json({ message: 'Error interno al actualizar estado de variante.' });
   }
 };
