@@ -923,3 +923,68 @@ export const eliminarImagenProducto = async (req, res) => {
     res.status(500).json({ message: 'Error interno al eliminar la imagen.' });
   }
 };
+
+export const subirImagenProducto = async (req, res) => {
+  const { producto_id } = req.params;
+
+  if (!producto_id || !req.file) {
+    return res.status(400).json({ message: 'El producto y la imagen son obligatorios.' });
+  }
+
+  const imagen_url = `/uploads/${req.file.filename}`; // Ruta relativa de la imagen subida
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) 
+       SELECT ?, ?, IFNULL(MAX(imagen_orden), -1) + 1 FROM imagenes_productos WHERE producto_id = ?`,
+      [producto_id, imagen_url, producto_id]
+    );
+
+    res.status(201).json({ 
+      message: 'Imagen subida exitosamente.', 
+      imagen_id: result.insertId, 
+      imagen_url 
+    });
+  } catch (error) {
+    console.error('Error al subir imagen del producto:', error);
+    res.status(500).json({ message: 'Error interno al subir la imagen.' });
+  }
+};
+
+export const eliminarImagenesNuevas = async (req, res) => {
+  const { producto_id, imagenes } = req.body;
+
+  if (!producto_id || !imagenes || !Array.isArray(imagenes)) {
+    return res.status(400).json({ message: 'El producto y las imágenes son obligatorios.' });
+  }
+
+  if (imagenes.length === 0) {
+    return res.status(200).json({ message: 'No hay imágenes nuevas para eliminar.' });
+  }
+  
+  try {
+    const conn = await pool.getConnection();
+
+    // Obtener las URLs de las imágenes para borrarlas del sistema de archivos
+    const [urls] = await conn.query(
+      `SELECT imagen_url FROM imagenes_productos WHERE producto_id = ? AND imagen_id IN (?)`,
+      [producto_id, imagenes]
+    );
+
+    // Eliminar las imágenes de la base de datos
+    await conn.query(`DELETE FROM imagenes_productos WHERE producto_id = ? AND imagen_id IN (?)`, [producto_id, imagenes]);
+
+    // Eliminar las imágenes del sistema de archivos
+    urls.forEach(({ imagen_url }) => {
+      const filePath = path.join('uploads', path.basename(imagen_url));
+      fs.unlink(filePath, (err) => {
+        if (err) console.error('Error al eliminar la imagen del sistema de archivos:', err);
+      });
+    });
+
+    res.status(200).json({ message: 'Imágenes nuevas eliminadas correctamente.' });
+  } catch (error) {
+    console.error('Error al eliminar imágenes nuevas:', error);
+    res.status(500).json({ message: 'Error interno al eliminar las imágenes.' });
+  }
+};

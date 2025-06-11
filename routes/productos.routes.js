@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto, subirImagenProducto, eliminarImagenesNuevas } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
 
@@ -59,5 +59,12 @@ router.put('/imagenes/mover', authenticate, validarPermisos('Modificar Producto'
 
 // Ruta para eliminar una imagen de un producto
 router.delete('/:producto_id/imagenes/:imagen_id', authenticate, validarPermisos('Modificar Producto'), eliminarImagenProducto);
+
+// Subir imagen directamente al producto
+router.post('/:producto_id/imagenes', authenticate, validarPermisos('Modificar Producto'), upload.single('file'), subirImagenProducto);
+
+// Ruta para cancelar el proceso de alta del producto y eliminar imágenes nuevas
+router.post('/:producto_id/cancelar-imagenes', authenticate, validarPermisos('Modificar Producto'), eliminarImagenesNuevas);
+
 
 export default router;
