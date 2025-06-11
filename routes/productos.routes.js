@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto, subirImagenProducto, eliminarImagenesNuevas, cambiarEstadoVariante, verificarVentasVariante } from '../controllers/productos.controller.js';
+import { crearProducto, guardarImagenTemporal, obtenerImagenesTemporales, moverImagenTemporal, eliminarImagenTemporal, cancelarProcesoAltaProducto, obtenerProductos, eliminarProducto, cambiarVisibilidadProducto, obtenerDetallesStock, obtenerProductoPorId, actualizarProducto, moverImagenProducto, eliminarImagenProducto, subirImagenProducto, eliminarImagenesNuevas, cambiarEstadoVariante, verificarVentasVariante, reactivarProducto } from '../controllers/productos.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
 
@@ -44,6 +44,9 @@ router.delete('/:producto_id', authenticate, validarPermisos('Eliminar Producto'
 
 // Ruta para cambiar la visibilidad de un producto
 router.put('/cambiar-visibilidad', authenticate, validarPermisos('Modificar Producto'), cambiarVisibilidadProducto);
+
+// Ruta para reactivar un producto
+router.put('/:producto_id/reactivar', authenticate, validarPermisos('Modificar Producto'), reactivarProducto);
 
 // Ruta para obtener detalles del stock de un producto específico
 router.get('/detalles-stock/:producto_id', authenticate, validarPermisos('Ver Productos'), obtenerDetallesStock);
