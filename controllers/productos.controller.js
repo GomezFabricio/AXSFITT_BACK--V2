@@ -541,7 +541,7 @@ export const obtenerDetallesStock = async (req, res) => {
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
       WHERE v.producto_id = ?
-      GROUP BY v.variante_id, ip.imagen_url`
+      GROUP BY v.variante_id, ip.imagen_url, v.variante_estado`
       , [producto_id]
     );
 
