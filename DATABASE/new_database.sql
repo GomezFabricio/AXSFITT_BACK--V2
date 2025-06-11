@@ -253,9 +253,23 @@ CREATE TABLE stock (
   cantidad INTEGER UNSIGNED NOT NULL DEFAULT 0,
   ubicacion VARCHAR(100) NULL,
   fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  stock_minimo INTEGER UNSIGNED NULL DEFAULT 0,
+  stock_maximo INTEGER UNSIGNED NULL,
   PRIMARY KEY(stock_id),
   FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY(variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+CREATE TABLE faltantes (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  producto_id INT UNSIGNED NULL,
+  variante_id INT UNSIGNED NULL,
+  fecha_deteccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  cantidad_faltante INT UNSIGNED NOT NULL,
+  resuelto BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY (id),
+  FOREIGN KEY (producto_id) REFERENCES productos(producto_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (variante_id) REFERENCES variantes(variante_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- ============================================
