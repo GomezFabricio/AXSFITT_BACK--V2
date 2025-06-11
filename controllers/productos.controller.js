@@ -688,7 +688,7 @@ export const actualizarProducto = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // Actualizar los datos principales del producto
+    // 1. Actualizar los datos principales del producto
     await conn.query(
       `UPDATE productos SET 
         producto_nombre = ?, 
@@ -703,15 +703,35 @@ export const actualizarProducto = async (req, res) => {
         producto_nombre,
         categoria_id,
         producto_descripcion || null,
-        producto_precio_venta || null,
-        producto_precio_costo || null,
-        producto_precio_oferta || null,
-        producto_sku || null,
+        variantes && variantes.length > 0 ? null : producto_precio_venta || null, // Si hay variantes, precio venta es null
+        variantes && variantes.length > 0 ? null : producto_precio_costo || null, // Si hay variantes, precio costo es null
+        variantes && variantes.length > 0 ? null : producto_precio_oferta || null, // Si hay variantes, precio oferta es null
+        variantes && variantes.length > 0 ? null : producto_sku || null, // Si hay variantes, SKU es null
         producto_id,
       ]
     );
 
-    // Actualizar imágenes del producto
+    // 2. Manejar el stock del producto principal
+    if (variantes && variantes.length > 0) {
+      // Si se agregaron variantes, eliminar el stock del producto principal
+      await conn.query(`DELETE FROM stock WHERE producto_id = ?`, [producto_id]);
+    } else {
+      // Si no hay variantes, actualizar el stock del producto principal
+      if (producto_stock !== undefined) {
+        // Verificar si ya existe un registro de stock para este producto
+        const [stockExistente] = await conn.query(`SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL`, [producto_id]);
+
+        if (stockExistente.length > 0) {
+          // Si existe, actualizar el stock
+          await conn.query(`UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`, [producto_stock, producto_id]);
+        } else {
+          // Si no existe, insertar un nuevo registro de stock
+          await conn.query(`INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`, [producto_id, producto_stock]);
+        }
+      }
+    }
+
+    // 3. Actualizar imágenes del producto
     if (imagenes && imagenes.length > 0) {
       const imagenesValidas = imagenes.filter((imagen) => imagen.url && imagen.url.trim() !== '');
 
@@ -728,20 +748,29 @@ export const actualizarProducto = async (req, res) => {
       }
     }
 
-    // Actualizar variantes
+    // 4. Actualizar variantes
     if (variantes && variantes.length > 0) {
-      // Eliminar variantes que no están en la lista enviada
+      // 4.1 Eliminar variantes que no están en la lista enviada
       const varianteIdsEnviadas = variantes.map((variante) => variante.variante_id).filter((id) => id !== undefined);
       if (varianteIdsEnviadas.length > 0) {
+        // Eliminar variantes
         await conn.query(
           `DELETE FROM variantes WHERE producto_id = ? AND variante_id NOT IN (?)`,
           [producto_id, varianteIdsEnviadas]
         );
+
+        // Eliminar stock de las variantes eliminadas
+        await conn.query(
+          `DELETE FROM stock WHERE variante_id NOT IN (?) AND producto_id = ?`,
+          [varianteIdsEnviadas, producto_id]
+        );
       } else {
         // Si no se envió ninguna variante, eliminar todas las variantes del producto
         await conn.query(`DELETE FROM variantes WHERE producto_id = ?`, [producto_id]);
+        await conn.query(`DELETE FROM stock WHERE producto_id = ?`, [producto_id]);
       }
 
+      // 4.2 Insertar o actualizar las variantes enviadas
       for (const variante of variantes) {
         // Obtener el ID de la imagen asociada a la variante
         let imagen_id = null;
@@ -834,7 +863,7 @@ export const actualizarProducto = async (req, res) => {
             if (atributo.length > 0) {
               await conn.query(
                 `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
-                [variante.variante_id, atributo[0].atributo_id, valor.valor_nombre]
+                [variante.variante_id, atributo[0].atributo_id, valor]
               );
             }
           }
