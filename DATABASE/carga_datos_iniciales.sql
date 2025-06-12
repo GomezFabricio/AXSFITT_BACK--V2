@@ -25,12 +25,13 @@ INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 -- 2 Productos
 INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 (NULL, 'Productos'),                      -- 4
-(4, 'Utilidades Productos');              -- 5
+(4, 'Utilidades Productos'),              -- 5
+(4, 'Stock');							  -- 6
 
 -- 3 Gestión de ventas
 INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
-(NULL, 'Gestión de ventas'),              -- 6
-(6, 'Promociones');                       -- 7
+(NULL, 'Gestión de ventas'),              -- 7
+(7, 'Promociones');                       -- 8
 
 -- 7. Permisos con rutas asociadas y visibilidad en menú
 -- Administración del Sistema
@@ -66,23 +67,28 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 
 -- Submódulo 2.10: Utilidades Productos
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(5, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE),         -- 2.10.1
-(5, 'Notificaciones de stock', '/productos/utilidades/notificaciones-stock', TRUE); -- 2.10.2
+(5, 'Aumentar Precios', '/productos/utilidades/aumentar-precios', TRUE);         -- 2.10.1
+
+-- Submódulo 2.11: Stock
+INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
+(6, 'Gestionar Stock', '/productos/stock', TRUE),         -- 2.11.1
+(6, 'Establecer Stock', NULL, FALSE),         -- 2.11.1.1
+(6, 'Ver Lista de Faltantes', '/productos/faltantes', TRUE);         -- 2.11.2
 
 -- Módulo 3: Gestión de ventas
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(6, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
-(6, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
-(6, 'Clientes', '/ventas/clientes', TRUE),               -- 3.3
-(6, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
-(6, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
-(6, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
-(6, 'Logistica', '/ventas/logistica', TRUE);             -- 3.7
+(7, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
+(7, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
+(7, 'Clientes', '/ventas/clientes', TRUE),               -- 3.3
+(7, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
+(7, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
+(7, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
+(7, 'Logistica', '/ventas/logistica', TRUE);             -- 3.7
 
 -- Submódulo 3.8: Promociones
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(7, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
-(7, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
+(8, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
+(8, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
 
 -- 8. Asignar todos los permisos al perfil (perfiles_modulos_permisos)
 INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
@@ -110,15 +116,17 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 4, 19),  -- Modificar Producto
 (1, 4, 20),  -- Eliminar Producto
 (1, 5, 21),  -- Aumentar Precios
-(1, 5, 22),  -- Notificaciones de stock
+(1, 6, 22),  -- Gestionar Stock
+(1, 6, 23),  -- Establecer Stock
+(1, 6, 24),  -- Ver Lista de Faltantes
 
 -- Gestión de ventas
-(1, 6, 23),  -- Listado de Ventas
-(1, 6, 24),  -- Agregar Venta
-(1, 6, 25),  -- Clientes
-(1, 6, 26),  -- Metricas
-(1, 6, 27),  -- Metodos de Pago
-(1, 6, 28),  -- Metodos de Envio
-(1, 6, 29),  -- Logistica
-(1, 7, 30),  -- Ofertas
-(1, 7, 31);  -- Cupones de Descuento
+(1, 7, 25),  -- Listado de Ventas
+(1, 7, 26),  -- Agregar Venta
+(1, 7, 27),  -- Clientes
+(1, 7, 28),  -- Metricas
+(1, 7, 29),  -- Metodos de Pago
+(1, 7, 30),  -- Metodos de Envio
+(1, 7, 31),  -- Logistica
+(1, 8, 32),  -- Ofertas
+(1, 8, 33);  -- Cupones de Descuento
