@@ -92,8 +92,59 @@ export const updateStock = async (req, res) => {
 // Modificar la función obtenerFaltantes para incluir también los faltantes registrados
 export const obtenerFaltantes = async (req, res) => {
   try {
-    // 1. Primero obtenemos productos y variantes con stock por debajo del mínimo
-    const [faltantesProductos] = await pool.query(`
+    // 1. Obtener todos los faltantes registrados (sin importar el stock actual)
+    const [faltantesRegistrados] = await pool.query(`
+      SELECT 
+        p.producto_id,
+        p.producto_nombre AS nombre,
+        c.categoria_nombre AS categoria,
+        COALESCE(s.cantidad, 0) AS stock_actual,
+        s.stock_minimo,
+        s.stock_maximo,
+        f.cantidad_faltante,
+        ip.imagen_url,
+        'producto' AS tipo,
+        f.id_faltante,
+        f.fecha_deteccion
+      FROM faltantes f
+      JOIN productos p ON f.producto_id = p.producto_id
+      LEFT JOIN stock s ON s.producto_id = p.producto_id
+      LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
+      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
+        SELECT MIN(imagen_orden) 
+        FROM imagenes_productos 
+        WHERE producto_id = p.producto_id
+      )
+      WHERE f.resuelto = FALSE AND f.producto_id IS NOT NULL
+    `);
+
+    const [variantesRegistradas] = await pool.query(`
+      SELECT 
+        v.variante_id,
+        p.producto_nombre AS producto_nombre,
+        v.variante_sku,
+        COALESCE(s.cantidad, 0) AS stock_actual,
+        s.stock_minimo,
+        s.stock_maximo,
+        f.cantidad_faltante,
+        ip.imagen_url,
+        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
+        'variante' AS tipo,
+        f.id_faltante,
+        f.fecha_deteccion
+      FROM faltantes f
+      JOIN variantes v ON f.variante_id = v.variante_id
+      JOIN productos p ON v.producto_id = p.producto_id
+      LEFT JOIN stock s ON s.variante_id = v.variante_id
+      LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
+      LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
+      LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
+      WHERE f.resuelto = FALSE AND f.variante_id IS NOT NULL
+      GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url, f.id_faltante, f.fecha_deteccion
+    `);
+
+    // 2. Obtener productos con stock por debajo del mínimo que NO estén ya registrados
+    const [faltantesProductosPorRegistrar] = await pool.query(`
       SELECT 
         p.producto_id,
         p.producto_nombre AS nombre,
@@ -107,8 +158,8 @@ export const obtenerFaltantes = async (req, res) => {
         END) AS cantidad_faltante,
         ip.imagen_url,
         'producto' AS tipo,
-        f.id_faltante,
-        f.fecha_deteccion
+        NULL as id_faltante,
+        NULL as fecha_deteccion
       FROM productos p
       JOIN stock s ON s.producto_id = p.producto_id
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
@@ -117,14 +168,17 @@ export const obtenerFaltantes = async (req, res) => {
         FROM imagenes_productos 
         WHERE producto_id = p.producto_id
       )
-      LEFT JOIN faltantes f ON f.producto_id = p.producto_id AND f.resuelto = FALSE
       WHERE p.producto_estado = 'activo' 
         AND s.cantidad < s.stock_minimo
         AND s.variante_id IS NULL
-      ORDER BY f.id_faltante IS NULL DESC, cantidad_faltante DESC
+        AND NOT EXISTS (
+          SELECT 1 FROM faltantes f 
+          WHERE f.producto_id = p.producto_id AND f.resuelto = FALSE
+        )
+      ORDER BY cantidad_faltante DESC
     `);
 
-    const [faltantesVariantes] = await pool.query(`
+    const [faltantesVariantesPorRegistrar] = await pool.query(`
       SELECT 
         v.variante_id,
         p.producto_nombre AS producto_nombre,
@@ -139,30 +193,38 @@ export const obtenerFaltantes = async (req, res) => {
         ip.imagen_url,
         GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
         'variante' AS tipo,
-        f.id_faltante,
-        f.fecha_deteccion
+        NULL as id_faltante,
+        NULL as fecha_deteccion
       FROM variantes v
       JOIN stock s ON s.variante_id = v.variante_id
       JOIN productos p ON v.producto_id = p.producto_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-      LEFT JOIN faltantes f ON f.variante_id = v.variante_id AND f.resuelto = FALSE
       WHERE v.variante_estado = 'activo' 
         AND s.cantidad < s.stock_minimo
-      GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url, f.id_faltante, f.fecha_deteccion
-      ORDER BY f.id_faltante IS NULL DESC, cantidad_faltante DESC
+        AND NOT EXISTS (
+          SELECT 1 FROM faltantes f 
+          WHERE f.variante_id = v.variante_id AND f.resuelto = FALSE
+        )
+      GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url
+      ORDER BY cantidad_faltante DESC
     `);
 
     // Combinar los resultados
-    const faltantes = [...faltantesProductos, ...faltantesVariantes];
+    const faltantes = [
+      ...faltantesRegistrados,
+      ...variantesRegistradas,
+      ...faltantesProductosPorRegistrar,
+      ...faltantesVariantesPorRegistrar
+    ];
     
     res.status(200).json(faltantes);
   } catch (error) {
     console.error('Error al obtener faltantes:', error);
     res.status(500).json({ message: 'Error interno al obtener faltantes.' });
   }
-};
+};;
 
 // Función para registrar un faltante en la tabla de faltantes
 export const registrarFaltante = async (req, res) => {
