@@ -680,6 +680,21 @@ export const actualizarProducto = async (req, res) => {
     variantes,
   } = req.body;
 
+  // Agregar depuración para ver los datos recibidos
+  console.log('Datos recibidos en actualizarProducto:', {
+    producto_id,
+    producto_nombre,
+    categoria_id,
+    producto_descripcion,
+    producto_precio_venta,
+    producto_precio_costo,
+    producto_precio_oferta,
+    producto_sku,
+    producto_stock,
+    imagenes,
+    variantes,
+  });
+
   if (!producto_nombre || !categoria_id) {
     return res.status(400).json({ message: 'El nombre del producto y la categoría son obligatorios.' });
   }
@@ -689,6 +704,16 @@ export const actualizarProducto = async (req, res) => {
     await conn.beginTransaction();
 
     // 1. Actualizar los datos principales del producto
+    const [producto] = await conn.query(`SELECT producto_estado FROM productos WHERE producto_id = ?`, [producto_id]);
+    let nuevoEstadoProducto = producto[0].producto_estado;
+
+    // Si se asigna un precio de venta y el estado es pendiente, cambiar a activo
+    if (producto[0].producto_estado === 'pendiente' && producto_precio_venta !== null && producto_precio_venta !== undefined && producto_precio_venta > 0) {
+      nuevoEstadoProducto = 'activo';
+    } else if (producto_precio_venta !== null && producto_precio_venta !== undefined && producto_precio_venta > 0) {
+      nuevoEstadoProducto = 'activo';
+    }
+
     await conn.query(
       `UPDATE productos SET 
         producto_nombre = ?, 
@@ -697,7 +722,8 @@ export const actualizarProducto = async (req, res) => {
         producto_precio_venta = ?, 
         producto_precio_costo = ?, 
         producto_precio_oferta = ?, 
-        producto_sku = ? 
+        producto_sku = ?,
+        producto_estado = ?
       WHERE producto_id = ?`,
       [
         producto_nombre,
@@ -706,28 +732,77 @@ export const actualizarProducto = async (req, res) => {
         variantes && variantes.length > 0 ? null : producto_precio_venta || null, // Si hay variantes, precio venta es null
         variantes && variantes.length > 0 ? null : producto_precio_costo || null, // Si hay variantes, precio costo es null
         variantes && variantes.length > 0 ? null : producto_precio_oferta || null, // Si hay variantes, precio oferta es null
-        variantes && variantes.length > 0 ? null : producto_sku || null, // Si hay variantes, SKU es null
+        variantes && variantes.length > 0 ? null : producto_sku || null, // Si hay variantes, SKU es null,
+        nuevoEstadoProducto,
         producto_id,
       ]
     );
 
     // 2. Manejar el stock del producto principal
+    const [stockExistenteProducto] = await conn.query(
+      `SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL`,
+      [producto_id]
+    );
+
     if (variantes && variantes.length > 0) {
+      // Si se agregaron variantes, establecer el precio y sku en null
+      await conn.query(
+        `UPDATE productos SET 
+          producto_precio_venta = NULL, 
+          producto_precio_costo = NULL, 
+          producto_precio_oferta = NULL, 
+          producto_sku = NULL 
+        WHERE producto_id = ?`,
+        [producto_id]
+      );
       // Si se agregaron variantes, eliminar el stock del producto principal
-      await conn.query(`DELETE FROM stock WHERE producto_id = ?`, [producto_id]);
+      if (stockExistenteProducto.length > 0) {
+        await conn.query(`UPDATE stock SET cantidad = 0 WHERE producto_id = ? AND variante_id IS NULL`, [producto_id]);
+      } else {
+        await conn.query(`INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`, [producto_id, 0]);
+      }
+    } else if (variantes && variantes.length === 0) {
+      // Si se eliminaron todas las variantes, establecer el stock en 0 y los precios y SKU en null
+      await conn.query(
+        `UPDATE productos SET 
+          producto_precio_venta = NULL, 
+          producto_precio_costo = NULL, 
+          producto_precio_oferta = NULL, 
+          producto_sku = NULL 
+        WHERE producto_id = ?`,
+        [producto_id]
+      );
+      // Establecer el stock en 0
+      if (stockExistenteProducto.length > 0) {
+        await conn.query(
+          `UPDATE stock SET cantidad = 0 WHERE producto_id = ? AND variante_id IS NULL`,
+          [producto_id]
+        );
+      } else {
+        await conn.query(
+          `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
+          [producto_id, 0]
+        );
+      }
     } else {
       // Si no hay variantes, actualizar el stock del producto principal
-      if (producto_stock !== undefined) {
-        // Verificar si ya existe un registro de stock para este producto
-        const [stockExistente] = await conn.query(`SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL`, [producto_id]);
+      let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
+      if (producto_stock !== undefined && producto_stock !== null) {
+        stockCantidad = producto_stock; // Usar el valor proporcionado
+      }
 
-        if (stockExistente.length > 0) {
-          // Si existe, actualizar el stock
-          await conn.query(`UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`, [producto_stock, producto_id]);
-        } else {
-          // Si no existe, insertar un nuevo registro de stock
-          await conn.query(`INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`, [producto_id, producto_stock]);
-        }
+      if (stockExistenteProducto.length > 0) {
+        // Si existe, actualizar el stock
+        await conn.query(
+          `UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`,
+          [stockCantidad, producto_id]
+        );
+      } else {
+        // Si no existe, insertar un nuevo registro de stock
+        await conn.query(
+          `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
+          [producto_id, stockCantidad]
+        );
       }
     }
 
@@ -749,7 +824,7 @@ export const actualizarProducto = async (req, res) => {
     }
 
     // 4. Actualizar variantes
-    if (variantes && variantes.length > 0) {
+    if (variantes) {
       // 4.1 Eliminar variantes que no están en la lista enviada
       const varianteIdsEnviadas = variantes.map((variante) => variante.variante_id).filter((id) => id !== undefined);
       if (varianteIdsEnviadas.length > 0) {
@@ -762,109 +837,152 @@ export const actualizarProducto = async (req, res) => {
         // Eliminar stock de las variantes eliminadas
         await conn.query(
           `DELETE FROM stock WHERE variante_id NOT IN (?) AND producto_id = ?`,
-          [varianteIdsEnviadas, producto_id]
+          [producto_id, varianteIdsEnviadas]
         );
-      } else {
-        // Si no se envió ninguna variante, eliminar todas las variantes del producto
+      } else if (variantes.length === 0) {
+        // Si se envió una lista vacía de variantes, eliminar todas las variantes del producto
         await conn.query(`DELETE FROM variantes WHERE producto_id = ?`, [producto_id]);
-        await conn.query(`DELETE FROM stock WHERE producto_id = ?`, [producto_id]);
+        // Si estoy modificando un producto que tiene variante. Y borro la variante. Debe insertarse en la tabla stock un registro (si no existeste previamente) para ese producto, en cero si no defino un stock y si defino un valor, debe tener ese valor.
+        const [stockExistente] = await conn.query(
+          `SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL`,
+          [producto_id]
+        );
+        if (stockExistente.length > 0) {
+          //en el caso de que este borrando una variante, y ese producto ya tiene un registro en stock, no debe borrarse, solo debe actualizarse con el valor de stock que le pase, si no la pasa nada, debe insertarse 0
+          let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
+          if (producto_stock !== undefined && producto_stock !== null) {
+            stockCantidad = producto_stock; // Usar el valor proporcionado
+          }
+          await conn.query(
+            `UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`,
+            [stockCantidad, producto_id]
+          );
+        } else {
+          let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
+          if (producto_stock !== undefined && producto_stock !== null) {
+            stockCantidad = producto_stock; // Usar el valor proporcionado
+          }
+          await conn.query(
+            `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
+            [producto_id, stockCantidad]
+          );
+        }
       }
 
       // 4.2 Insertar o actualizar las variantes enviadas
-      for (const variante of variantes) {
-        // Obtener el ID de la imagen asociada a la variante
-        let imagen_id = null;
-        if (variante.imagen_url) {
-          const [imagenResult] = await conn.query(
-            `SELECT imagen_id FROM imagenes_productos WHERE producto_id = ? AND imagen_url = ?`,
-            [producto_id, variante.imagen_url]
-          );
-          if (imagenResult.length > 0) {
-            imagen_id = imagenResult[0].imagen_id;
+      if (variantes.length > 0) {
+        for (const variante of variantes) {
+          // Obtener el ID de la imagen asociada a la variante
+          let imagen_id = null;
+          if (variante.imagen_url) {
+            const [imagenResult] = await conn.query(
+              `SELECT imagen_id FROM imagenes_productos WHERE producto_id = ? AND imagen_url = ?`,
+              [producto_id, variante.imagen_url]
+            );
+            if (imagenResult.length > 0) {
+              imagen_id = imagenResult[0].imagen_id;
+            }
           }
-        }
 
-        // Actualizar o insertar la variante
-        if (variante.variante_id) {
-          await conn.query(
-            `UPDATE variantes SET 
-              variante_precio_venta = ?, 
-              variante_precio_costo = ?, 
-              variante_precio_oferta = ?, 
-              variante_sku = ?, 
-              imagen_id = ? 
-            WHERE variante_id = ?`,
-            [
-              variante.precio_venta || null,
-              variante.precio_costo || null,
-              variante.precio_oferta || null,
-              variante.sku || null,
-              imagen_id,
-              variante.variante_id,
-            ]
-          );
-        } else {
-          const [varianteResult] = await conn.query(
-            `INSERT INTO variantes (
-              producto_id, 
-              imagen_id, 
-              variante_precio_venta, 
-              variante_precio_costo, 
-              variante_precio_oferta, 
-              variante_sku
-            ) VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-              producto_id,
-              imagen_id,
-              variante.precio_venta || null,
-              variante.precio_costo || null,
-              variante.precio_oferta || null,
-              variante.sku || null,
-            ]
-          );
-          variante.variante_id = varianteResult.insertId;
-        }
+          let nuevoEstadoVariante = variante.variante_estado;
+          if (variante.precio_venta !== null && variante.precio_venta !== undefined && variante.precio_venta > 0) {
+            nuevoEstadoVariante = 'activo';
+          }
 
-        // Actualizar el stock de la variante
-        if (variante.stock !== undefined) {
-          const stockCantidad = variante.stock !== null ? variante.stock : 0;
-
-          const [stockExistente] = await conn.query(
-            `SELECT stock_id FROM stock WHERE variante_id = ?`,
-            [variante.variante_id]
-          );
-
-          if (stockExistente.length > 0) {
+          // Actualizar o insertar la variante
+          if (variante.variante_id) {
             await conn.query(
-              `UPDATE stock SET cantidad = ? WHERE variante_id = ?`,
-              [stockCantidad, variante.variante_id]
+              `UPDATE variantes SET 
+                variante_precio_venta = ?, 
+                variante_precio_costo = ?, 
+                variante_precio_oferta = ?, 
+                variante_sku = ?, 
+                imagen_id = ? ,
+                variante_estado = ?
+              WHERE variante_id = ?`,
+              [
+                variante.precio_venta || null,
+                variante.precio_costo || null,
+                variante.precio_oferta || null,
+                variante.sku || null,
+                imagen_id,
+                nuevoEstadoVariante,
+                variante.variante_id,
+              ]
             );
           } else {
-            await conn.query(
-              `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
-              [variante.variante_id, stockCantidad]
+            const [varianteResult] = await conn.query(
+              `INSERT INTO variantes (
+                producto_id, 
+                imagen_id, 
+                variante_precio_venta, 
+                variante_precio_costo, 
+                variante_precio_oferta, 
+                variante_sku,
+                variante_estado
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [
+                producto_id,
+                imagen_id,
+                variante.precio_venta || null,
+                variante.precio_costo || null,
+                variante.precio_oferta || null,
+                variante.sku || null,
+                nuevoEstadoVariante,
+              ]
             );
+            variante.variante_id = varianteResult.insertId;
           }
-        }
 
-        // Actualizar los valores de atributos de la variante
-        if (variante.valores && variante.valores.length > 0) {
-          await conn.query(
-            `DELETE FROM valores_variantes WHERE variante_id = ?`,
-            [variante.variante_id]
-          );
+          // Actualizar el stock de la variante
+          if (variante.stock !== undefined) {
+            const stockCantidad = variante.stock !== null ? variante.stock : 0;
 
-          for (const valor of variante.valores) {
-            const [atributo] = await conn.query(
-              `SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?`,
-              [producto_id, valor.atributo_nombre]
+            const [stockExistente] = await conn.query(
+              `SELECT stock_id FROM stock WHERE variante_id = ?`,
+              [variante.variante_id]
             );
 
-            if (atributo.length > 0) {
+            if (stockExistente.length > 0) {
               await conn.query(
-                `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
-                [variante.variante_id, atributo[0].atributo_id, valor]
+                `UPDATE stock SET cantidad = ? WHERE variante_id = ?`,
+                [stockCantidad, variante.variante_id]
               );
+            } else {
+              await conn.query(
+                `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
+                [variante.variante_id, stockCantidad]
+              );
+            }
+          }
+
+          // Insertar valores asociados a la variante
+          // Insertar valores asociados a la variante
+          if (variante.valores && variante.valores.length > 0) {
+            // Eliminar los valores existentes para evitar duplicados
+            await conn.query(
+              `DELETE FROM valores_variantes WHERE variante_id = ?`,
+              [variante.variante_id]
+            );
+
+            for (const valor of variante.valores) {
+              // Obtener el atributo_id correspondiente al atributo_nombre
+              const [atributo] = await conn.query(
+                `SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?`,
+                [producto_id, valor.atributo_nombre]
+              );
+
+              if (atributo.length > 0) {
+                const atributo_id = atributo[0].atributo_id;
+
+                // Insertar el nuevo valor
+                await conn.query(
+                  `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
+                  [variante.variante_id, atributo_id, valor.valor_nombre]
+                );
+              } else {
+                console.warn(`No se encontró el atributo '${valor.atributo_nombre}' para el producto ${producto_id}.`);
+              }
             }
           }
         }
