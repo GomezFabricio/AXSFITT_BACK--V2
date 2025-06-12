@@ -5,15 +5,27 @@ export const updateStock = async (req, res) => {
     const { id } = req.params;
     const { stock_minimo, stock_maximo } = req.body;
 
-    // Validar que el producto exista
+    // Determine if the ID is for a product or a variant
     const [producto] = await pool.query("SELECT * FROM productos WHERE producto_id = ?", [id]);
-    if (producto.length === 0) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+    const [variante] = await pool.query("SELECT * FROM variantes WHERE variante_id = ?", [id]);
+
+    let isProducto = producto.length > 0;
+    let isVariante = variante.length > 0;
+
+    if (!isProducto && !isVariante) {
+      return res.status(404).json({ message: "Producto o variante no encontrado" });
+    }
+
+    let updateQuery = "";
+    if (isProducto) {
+      updateQuery = "UPDATE stock SET stock_minimo = ?, stock_maximo = ? WHERE producto_id = ?";
+    } else {
+      updateQuery = "UPDATE stock SET stock_minimo = ?, stock_maximo = ? WHERE variante_id = ?";
     }
 
     // Actualizar el stock en la base de datos
     await pool.query(
-      "UPDATE stock SET stock_minimo = ?, stock_maximo = ? WHERE producto_id = ?",
+      updateQuery,
       [stock_minimo, stock_maximo, id]
     );
 

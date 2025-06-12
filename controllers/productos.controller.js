@@ -410,6 +410,26 @@ export const obtenerProductos = async (req, res) => {
       ORDER BY p.producto_nombre ASC
     `);
 
+    // Fetch variants for each product
+    for (const producto of productos) {
+      const [variantes] = await pool.query(`
+        SELECT 
+          v.variante_id,
+          v.variante_sku,
+          COALESCE(s.cantidad, 0) AS stock_total,
+          ip.imagen_url,
+          vv.valor_nombre,
+          a.atributo_nombre
+        FROM variantes v
+        LEFT JOIN stock s ON s.variante_id = v.variante_id
+        LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
+        LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
+        LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
+        WHERE v.producto_id = ?
+      `, [producto.producto_id]);
+      producto.variantes = variantes;
+    }
+
     res.status(200).json(productos);
   } catch (error) {
     console.error('Error al obtener productos:', error);
