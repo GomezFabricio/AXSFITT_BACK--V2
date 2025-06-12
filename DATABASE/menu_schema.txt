@@ -30,7 +30,7 @@
     2.11 Stock (submodulo de modulo 2)
         2.11.1 Gestionar Stock (permiso visible en menú, asociado a submodulo 2.11)
             2.11.1.1 Establecer Stock (permiso interno, NO visible en menú, asociado a submodulo 2.11.1)
-        2.11.2 Ver Lista de Faltantes (permiso visible en menú, asociado a submodulo 2.11)
+            2.11.2 Ver Lista de Faltantes (permiso visible en menú, asociado a submodulo 2.11)
 
 3 Gestión de ventas (modulo)
     3.1 Listado de Ventas (permiso visible en menú, asociado a modulo 3)
