@@ -28,7 +28,18 @@ export const crearProducto = async (req, res) => {
     await conn.beginTransaction();
 
     // Determinar el estado del producto
-    const producto_estado = producto_precio_venta ? 'activo' : 'pendiente';
+    let producto_estado = 'pendiente';
+    
+    // Si tiene variantes, verificar si al menos una tiene precio de venta
+    if (variantes && variantes.length > 0) {
+      const tieneVarianteConPrecio = variantes.some(variante => 
+        variante.precio_venta && parseFloat(variante.precio_venta) > 0
+      );
+      producto_estado = tieneVarianteConPrecio ? 'activo' : 'pendiente';
+    } else {
+      // Si no tiene variantes, verificar el precio del producto
+      producto_estado = producto_precio_venta ? 'activo' : 'pendiente';
+    }
 
     // 1. Insertar el producto
     const [productoResult] = await conn.query(
