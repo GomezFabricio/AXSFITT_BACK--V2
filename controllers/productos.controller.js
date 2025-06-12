@@ -739,10 +739,18 @@ export const actualizarProducto = async (req, res) => {
     const [producto] = await conn.query(`SELECT producto_estado FROM productos WHERE producto_id = ?`, [producto_id]);
     let nuevoEstadoProducto = producto[0].producto_estado;
 
-    // Si se asigna un precio de venta y el estado es pendiente, cambiar a activo
-    if (producto[0].producto_estado === 'pendiente' && producto_precio_venta !== null && producto_precio_venta !== undefined && producto_precio_venta > 0) {
-      nuevoEstadoProducto = 'activo';
-    } else if (producto_precio_venta !== null && producto_precio_venta !== undefined && producto_precio_venta > 0) {
+    // Si el producto tiene variantes, verificamos si al menos una tiene precio de venta
+    if (variantes && variantes.length > 0) {
+      const tieneVarianteConPrecio = variantes.some(variante => 
+        variante.precio_venta !== null && variante.precio_venta !== undefined && parseFloat(variante.precio_venta) > 0
+      );
+      
+      if (tieneVarianteConPrecio) {
+        nuevoEstadoProducto = 'activo'; // Si al menos una variante tiene precio, el producto es activo
+      }
+    }
+    // Si no tiene variantes y tiene precio de venta, también será activo
+    else if (producto_precio_venta !== null && producto_precio_venta !== undefined && parseFloat(producto_precio_venta) > 0) {
       nuevoEstadoProducto = 'activo';
     }
 
@@ -837,7 +845,7 @@ export const actualizarProducto = async (req, res) => {
         );
       }
     }
-
+    
     // 3. Actualizar imágenes del producto
     if (imagenes && imagenes.length > 0) {
       const imagenesValidas = imagenes.filter((imagen) => imagen.url && imagen.url.trim() !== '');
