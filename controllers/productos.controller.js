@@ -837,7 +837,7 @@ export const actualizarProducto = async (req, res) => {
         // Eliminar stock de las variantes eliminadas
         await conn.query(
           `DELETE FROM stock WHERE variante_id NOT IN (?) AND producto_id = ?`,
-          [producto_id, varianteIdsEnviadas]
+          [varianteIdsEnviadas, producto_id]
         );
       } else if (variantes.length === 0) {
         // Si se envió una lista vacía de variantes, eliminar todas las variantes del producto
@@ -871,6 +871,39 @@ export const actualizarProducto = async (req, res) => {
 
       // 4.2 Insertar o actualizar las variantes enviadas
       if (variantes.length > 0) {
+        // Primero, recolectamos todos los nombres de atributos únicos de todas las variantes
+        const atributosUnicos = new Set();
+        for (const variante of variantes) {
+          if (variante.valores && Array.isArray(variante.valores)) {
+            for (const valor of variante.valores) {
+              atributosUnicos.add(valor.atributo_nombre);
+            }
+          }
+        }
+
+        // Luego, insertamos los atributos si no existen
+        const atributoIds = {};
+        for (const atributo_nombre of atributosUnicos) {
+          // Verificar si el atributo ya existe para este producto
+          const [atributoExistente] = await conn.query(
+            `SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?`,
+            [producto_id, atributo_nombre]
+          );
+
+          if (atributoExistente.length > 0) {
+            // Si el atributo ya existe, usar su ID
+            atributoIds[atributo_nombre] = atributoExistente[0].atributo_id;
+          } else {
+            // Si el atributo no existe, insertarlo
+            const [atributoResult] = await conn.query(
+              `INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)`,
+              [producto_id, atributo_nombre]
+            );
+            atributoIds[atributo_nombre] = atributoResult.insertId;
+          }
+        }
+
+        // Ahora que todos los atributos están insertados, podemos insertar las variantes
         for (const variante of variantes) {
           // Obtener el ID de la imagen asociada a la variante
           let imagen_id = null;
@@ -890,6 +923,7 @@ export const actualizarProducto = async (req, res) => {
           }
 
           // Actualizar o insertar la variante
+          let varianteResult;
           if (variante.variante_id) {
             await conn.query(
               `UPDATE variantes SET 
@@ -910,8 +944,9 @@ export const actualizarProducto = async (req, res) => {
                 variante.variante_id,
               ]
             );
+            varianteResult = { insertId: variante.variante_id }; // Simulamos el resultado para mantener la lógica
           } else {
-            const [varianteResult] = await conn.query(
+            [varianteResult] = await conn.query(
               `INSERT INTO variantes (
                 producto_id, 
                 imagen_id, 
@@ -957,31 +992,29 @@ export const actualizarProducto = async (req, res) => {
           }
 
           // Insertar valores asociados a la variante
-          // Insertar valores asociados a la variante
-          if (variante.valores && variante.valores.length > 0) {
-            // Eliminar los valores existentes para evitar duplicados
-            await conn.query(
-              `DELETE FROM valores_variantes WHERE variante_id = ?`,
-              [variante.variante_id]
-            );
-
+          if (variante.valores && Array.isArray(variante.valores)) {
             for (const valor of variante.valores) {
-              // Obtener el atributo_id correspondiente al atributo_nombre
-              const [atributo] = await conn.query(
-                `SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?`,
-                [producto_id, valor.atributo_nombre]
-              );
+              const atributo_nombre = valor.atributo_nombre;
 
-              if (atributo.length > 0) {
-                const atributo_id = atributo[0].atributo_id;
+              if (!atributoIds[atributo_nombre]) {
+                console.warn(`No se encontró el atributo '${atributo_nombre}' para el producto ${producto_id}.`);
+                continue;
+              }
 
-                // Insertar el nuevo valor
+              const atributo_id = atributoIds[atributo_nombre];
+
+              // Insertar el nuevo valor
+              try {
                 await conn.query(
                   `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
-                  [variante.variante_id, atributo_id, valor.valor_nombre]
+                  [varianteResult.insertId, atributo_id, valor.valor_nombre]
                 );
-              } else {
-                console.warn(`No se encontró el atributo '${valor.atributo_nombre}' para el producto ${producto_id}.`);
+              } catch (innerError) {
+                if (innerError.code === 'ER_DUP_ENTRY') {
+                  console.warn(`Intento de insertar valor duplicado para variante_id ${varianteResult.insertId} y atributo_id ${atributo_id}.`);
+                } else {
+                  throw innerError; // Re-lanza el error si no es una entrada duplicada
+                }
               }
             }
           }
