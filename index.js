@@ -13,6 +13,7 @@
    import perfilesRoutes from './routes/perfiles.routes.js';
    import CategoriasRoutes from './routes/categorias.routes.js';
    import ProductosRoutes from './routes/productos.routes.js';
+   import StockRoutes from './routes/stock.routes.js';
 
    const __filename = fileURLToPath(import.meta.url);
    const __dirname = dirname(__filename);
@@ -33,6 +34,7 @@
    app.use('/api/perfiles', perfilesRoutes);
    app.use('/api/categorias', CategoriasRoutes);
    app.use('/api/productos', ProductosRoutes);
+   app.use('/api/stock', StockRoutes);
 
    app.get('/', (req, res) => {
        res.send('Servidor funcionando correctamente');

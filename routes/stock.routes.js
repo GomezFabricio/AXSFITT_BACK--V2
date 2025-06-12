@@ -6,7 +6,7 @@ import validarPermisos from '../middlewares/validarPermiso.js';
 const router = Router();
 
 router.put(
-  '/productos/:id/stock', authenticate, updateStock
+  '/:id', authenticate, updateStock
 );
 
 export default router;
