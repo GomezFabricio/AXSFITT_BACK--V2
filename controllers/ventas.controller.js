@@ -869,3 +869,84 @@ export const actualizarDatosVenta = async (req, res) => {
     res.status(500).json({ message: 'Error interno al actualizar los datos de la venta.' });
   }
 };
+
+export const obtenerMetricasVentas = async (req, res) => {
+  try {
+    const conn = await pool.getConnection();
+    
+    // 1. Resumen de ventas general
+    const [resumenGeneral] = await conn.query(`
+      SELECT 
+        COUNT(*) as total_ventas,
+        SUM(venta_monto_total) as ingresos_totales,
+        AVG(venta_monto_total) as ticket_promedio,
+        (
+          SELECT COUNT(*) 
+          FROM ventas 
+          WHERE venta_estado_pago = 'abonado'
+        ) as ventas_completadas,
+        (
+          SELECT COUNT(*) 
+          FROM ventas 
+          WHERE venta_estado_pago = 'pendiente'
+        ) as ventas_pendientes,
+        (
+          SELECT COUNT(*) 
+          FROM ventas 
+          WHERE venta_estado_pago = 'cancelado'
+        ) as ventas_canceladas
+      FROM ventas
+    `);
+    
+    // 2. Ventas por mes (últimos 6 meses)
+    const [ventasPorMes] = await conn.query(`
+      SELECT 
+        DATE_FORMAT(venta_fecha, '%Y-%m') as mes,
+        COUNT(*) as cantidad_ventas,
+        SUM(venta_monto_total) as ingresos
+      FROM ventas
+      WHERE venta_fecha >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
+      GROUP BY DATE_FORMAT(venta_fecha, '%Y-%m')
+      ORDER BY mes ASC
+    `);
+    
+    // 3. Ventas por origen
+    const [ventasPorOrigen] = await conn.query(`
+      SELECT 
+        venta_origen,
+        COUNT(*) as cantidad_ventas,
+        SUM(venta_monto_total) as ingresos_totales
+      FROM ventas
+      GROUP BY venta_origen
+      ORDER BY cantidad_ventas DESC
+    `);
+    
+    // 4. Productos más vendidos
+    const [productosMasVendidos] = await conn.query(`
+      SELECT 
+        COALESCE(p.producto_nombre, vd.producto_nombre) as producto_nombre,
+        SUM(vd.vd_cantidad) as unidades_vendidas,
+        SUM(vd.vd_subtotal) as ingresos_generados
+      FROM ventas_detalle vd
+      LEFT JOIN productos p ON vd.producto_id = p.producto_id
+      JOIN ventas v ON vd.venta_id = v.venta_id
+      WHERE v.venta_estado_pago != 'cancelado'
+      GROUP BY COALESCE(p.producto_nombre, vd.producto_nombre)
+      ORDER BY unidades_vendidas DESC
+      LIMIT 10
+    `);
+    
+    conn.release();
+    
+    res.status(200).json({
+      resumen: resumenGeneral[0],
+      ventasPorMes,
+      ventasPorOrigen,
+      productosMasVendidos
+    });
+    
+  } catch (error) {
+    console.error('Error al obtener métricas de ventas:', error);
+    res.status(500).json({ message: 'Error interno al obtener métricas.' });
+  }
+};

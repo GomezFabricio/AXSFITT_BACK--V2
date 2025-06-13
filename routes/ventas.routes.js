@@ -8,7 +8,8 @@ import {
   buscarProductosParaVenta,
   obtenerVariantesProducto,
   verificarStock,
-  actualizarDatosVenta
+  actualizarDatosVenta,
+  obtenerMetricasVentas
 } from '../controllers/ventas.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -84,6 +85,14 @@ router.put(
   authenticate, 
   validarPermisos('Modificar Venta'), 
   actualizarDatosVenta
+);
+
+// Obtener métricas de ventas
+router.get(
+  '/metricas/dashboard', 
+  authenticate, 
+  validarPermisos('Listado de Ventas'), 
+  obtenerMetricasVentas
 );
 
 export default router;
