@@ -7,7 +7,8 @@ import {
   actualizarEstadoEnvio,
   buscarProductosParaVenta,
   obtenerVariantesProducto,
-  verificarStock
+  verificarStock,
+  actualizarDatosVenta
 } from '../controllers/ventas.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -76,6 +77,13 @@ router.post(
   authenticate, 
   validarPermisos('Agregar Venta'), 
   verificarStock
+);
+
+router.put(
+  '/:id/datos', 
+  authenticate, 
+  validarPermisos('Modificar Venta'), 
+  actualizarDatosVenta
 );
 
 export default router;

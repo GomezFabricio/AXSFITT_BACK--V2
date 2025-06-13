@@ -490,9 +490,9 @@ export const actualizarEstadoPago = async (req, res) => {
   try {
     await conn.beginTransaction();
     
-    // Primero obtenemos el estado actual
+    // Primero obtenemos el estado actual y la fecha de la venta
     const [ventaActual] = await conn.query(
-      `SELECT venta_estado_pago FROM ventas WHERE venta_id = ?`,
+      `SELECT venta_estado_pago, venta_fecha FROM ventas WHERE venta_id = ?`,
       [id]
     );
     
@@ -502,6 +502,17 @@ export const actualizarEstadoPago = async (req, res) => {
     }
     
     const estadoActual = ventaActual[0].venta_estado_pago;
+    const fechaVenta = new Date(ventaActual[0].venta_fecha);
+    const hoy = new Date();
+    const diasTranscurridos = Math.floor((hoy - fechaVenta) / (1000 * 60 * 60 * 24));
+    
+    // Validar que no se cambie de 'cancelado' a otro estado después de 3 días
+    if (estadoActual === 'cancelado' && estado_pago !== 'cancelado' && diasTranscurridos > 3) {
+      await conn.rollback();
+      return res.status(400).json({ 
+        message: 'No se puede cambiar el estado de una venta cancelada después de 3 días.' 
+      });
+    }
     
     // Actualizar estado de pago
     await conn.query(
@@ -510,7 +521,7 @@ export const actualizarEstadoPago = async (req, res) => {
     );
     
     // Si cambia a estado cancelado, restaurar stock
-    if (estado_pago === 'cancelado') {
+    if (estado_pago === 'cancelado' && estadoActual !== 'cancelado') {
       const [productos] = await conn.query(
         `SELECT 
           producto_id, 
@@ -536,6 +547,37 @@ export const actualizarEstadoPago = async (req, res) => {
             [producto.vd_cantidad, producto.producto_id]
           );
           console.log(`Stock restaurado para producto ${producto.producto_id}: +${producto.vd_cantidad}`);
+        }
+      }
+    }
+    
+    // Si cambia de cancelado a otro estado, descontar stock nuevamente
+    if (estadoActual === 'cancelado' && estado_pago !== 'cancelado') {
+      const [productos] = await conn.query(
+        `SELECT 
+          producto_id, 
+          variante_id, 
+          vd_cantidad 
+        FROM ventas_detalle 
+        WHERE venta_id = ?`,
+        [id]
+      );
+      
+      for (const producto of productos) {
+        if (producto.variante_id) {
+          // Descontar stock de variante
+          await conn.query(
+            `UPDATE stock SET cantidad = GREATEST(0, cantidad - ?) WHERE variante_id = ?`,
+            [producto.vd_cantidad, producto.variante_id]
+          );
+          console.log(`Stock descontado para variante ${producto.variante_id}: -${producto.vd_cantidad}`);
+        } else if (producto.producto_id) {
+          // Descontar stock de producto
+          await conn.query(
+            `UPDATE stock SET cantidad = GREATEST(0, cantidad - ?) WHERE producto_id = ? AND variante_id IS NULL`,
+            [producto.vd_cantidad, producto.producto_id]
+          );
+          console.log(`Stock descontado para producto ${producto.producto_id}: -${producto.vd_cantidad}`);
         }
       }
     }
@@ -799,3 +841,31 @@ export const origenesVenta = [
   { value: 'Whatsapp', label: 'Whatsapp' },
   { value: 'Presencial', label: 'Presencial' }
 ];
+
+export const actualizarDatosVenta = async (req, res) => {
+  const { id } = req.params;
+  const { venta_nota, venta_origen } = req.body;
+  
+  try {
+    const [result] = await pool.query(
+      `UPDATE ventas SET 
+        venta_nota = ?, 
+        venta_origen = ? 
+      WHERE venta_id = ?`,
+      [venta_nota, venta_origen, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Venta no encontrada.' });
+    }
+    
+    res.status(200).json({
+      message: 'Datos de la venta actualizados correctamente',
+      venta_id: id
+    });
+    
+  } catch (error) {
+    console.error('Error al actualizar datos de la venta:', error);
+    res.status(500).json({ message: 'Error interno al actualizar los datos de la venta.' });
+  }
+};
