@@ -769,10 +769,10 @@ export const actualizarProducto = async (req, res) => {
         producto_nombre,
         categoria_id,
         producto_descripcion || null,
-        variantes && variantes.length > 0 ? null : producto_precio_venta || null, // Si hay variantes, precio venta es null
-        variantes && variantes.length > 0 ? null : producto_precio_costo || null, // Si hay variantes, precio costo es null
-        variantes && variantes.length > 0 ? null : producto_precio_oferta || null, // Si hay variantes, precio oferta es null
-        variantes && variantes.length > 0 ? null : producto_sku || null, // Si hay variantes, SKU es null,
+        variantes && variantes.length > 0 ? null : producto_precio_venta,
+        variantes && variantes.length > 0 ? null : producto_precio_costo,
+        variantes && variantes.length > 0 ? null : producto_precio_oferta,
+        variantes && variantes.length > 0 ? null : producto_sku,
         nuevoEstadoProducto,
         producto_id,
       ]
@@ -802,26 +802,39 @@ export const actualizarProducto = async (req, res) => {
         await conn.query(`INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`, [producto_id, 0]);
       }
     } else if (variantes && variantes.length === 0) {
-      // Si se eliminaron todas las variantes, establecer el stock en 0 y los precios y SKU en null
+      // Si se eliminaron todas las variantes, actualizar con los valores proporcionados
+      // CORRECCIÓN: No establecer los precios a NULL automáticamente, usar los valores proporcionados
       await conn.query(
         `UPDATE productos SET 
-          producto_precio_venta = NULL, 
-          producto_precio_costo = NULL, 
-          producto_precio_oferta = NULL, 
-          producto_sku = NULL 
+          producto_precio_venta = ?, 
+          producto_precio_costo = ?, 
+          producto_precio_oferta = ?, 
+          producto_sku = ? 
         WHERE producto_id = ?`,
-        [producto_id]
+        [
+          producto_precio_venta,
+          producto_precio_costo,
+          producto_precio_oferta,
+          producto_sku,
+          producto_id
+        ]
       );
-      // Establecer el stock en 0
+      
+      // Establecer el stock 
+      let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
+      if (producto_stock !== undefined && producto_stock !== null) {
+        stockCantidad = producto_stock; // Usar el valor proporcionado
+      }
+      
       if (stockExistenteProducto.length > 0) {
         await conn.query(
-          `UPDATE stock SET cantidad = 0 WHERE producto_id = ? AND variante_id IS NULL`,
-          [producto_id]
+          `UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`,
+          [stockCantidad, producto_id]
         );
       } else {
         await conn.query(
           `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
-          [producto_id, 0]
+          [producto_id, stockCantidad]
         );
       }
     } else {
@@ -882,26 +895,25 @@ export const actualizarProducto = async (req, res) => {
       } else if (variantes.length === 0) {
         // Si se envió una lista vacía de variantes, eliminar todas las variantes del producto
         await conn.query(`DELETE FROM variantes WHERE producto_id = ?`, [producto_id]);
-        // Si estoy modificando un producto que tiene variante. Y borro la variante. Debe insertarse en la tabla stock un registro (si no existeste previamente) para ese producto, en cero si no defino un stock y si defino un valor, debe tener ese valor.
+        
+        // Si estoy modificando un producto que tiene variante. Y borro la variante. Debe insertarse en la tabla stock un registro (si no existeste previamente) para ese producto
         const [stockExistente] = await conn.query(
           `SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL`,
           [producto_id]
         );
+        
+        let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
+        if (producto_stock !== undefined && producto_stock !== null) {
+          stockCantidad = producto_stock; // Usar el valor proporcionado
+        }
+        
         if (stockExistente.length > 0) {
-          //en el caso de que este borrando una variante, y ese producto ya tiene un registro en stock, no debe borrarse, solo debe actualizarse con el valor de stock que le pase, si no la pasa nada, debe insertarse 0
-          let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
-          if (producto_stock !== undefined && producto_stock !== null) {
-            stockCantidad = producto_stock; // Usar el valor proporcionado
-          }
+          //en el caso de que este borrando una variante, y ese producto ya tiene un registro en stock, no debe borrarse, solo debe actualizarse con el valor de stock que le pase
           await conn.query(
             `UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`,
             [stockCantidad, producto_id]
           );
         } else {
-          let stockCantidad = 0; // Valor por defecto si no se proporciona producto_stock
-          if (producto_stock !== undefined && producto_stock !== null) {
-            stockCantidad = producto_stock; // Usar el valor proporcionado
-          }
           await conn.query(
             `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
             [producto_id, stockCantidad]
