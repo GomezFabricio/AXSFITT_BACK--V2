@@ -123,20 +123,25 @@ export const obtenerVentaPorId = async (req, res) => {
     }
     
     // 3. Obtener productos de la venta
+    // Utilizamos COALESCE para tomar los nombres respaldados cuando no hay referencias
     const [productos] = await conn.query(`
       SELECT 
-        vd.detalle_id,
-        vd.detalle_cantidad,
-        vd.detalle_precio_unitario,
-        p.producto_id,
-        p.producto_nombre,
-        vd.vd_variante_id,
+        vd.vd_id,
+        vd.vd_cantidad,
+        vd.vd_precio_unitario,
+        vd.vd_subtotal,
+        vd.producto_id,
+        COALESCE(p.producto_nombre, vd.producto_nombre) as producto_nombre,
+        vd.variante_id,
         v.variante_sku,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS variante_descripcion,
+        COALESCE(
+          GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', '), 
+          vd.variante_descripcion
+        ) AS variante_descripcion,
         ip.imagen_url
       FROM ventas_detalle vd
-      JOIN productos p ON vd.producto_id = p.producto_id
-      LEFT JOIN variantes v ON vd.vd_variante_id = v.variante_id
+      LEFT JOIN productos p ON vd.producto_id = p.producto_id
+      LEFT JOIN variantes v ON vd.variante_id = v.variante_id
       LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id
       LEFT JOIN atributos a ON vv.atributo_id = a.atributo_id
       LEFT JOIN imagenes_productos ip ON (
@@ -146,7 +151,7 @@ export const obtenerVentaPorId = async (req, res) => {
         END
       )
       WHERE vd.venta_id = ?
-      GROUP BY vd.detalle_id, p.producto_nombre, v.variante_sku, ip.imagen_url
+      GROUP BY vd.vd_id, vd.vd_precio_unitario, vd.producto_nombre, v.variante_sku, ip.imagen_url, vd.variante_descripcion
     `, [id]);
     
     resultado.productos = productos;
@@ -200,7 +205,49 @@ export const crearVenta = async (req, res) => {
   try {
     await conn.beginTransaction();
     
-    // 1. Crear la venta principal
+    // Si no hay un cliente_id seleccionado, crear un nuevo cliente
+    let clienteId = venta.cliente_id;
+    
+    if (!clienteId && cliente_invitado) {
+      console.log('Creando nuevo cliente:', cliente_invitado);
+      
+      // 1. Insertar la persona
+      const [personaResult] = await conn.query(
+        `INSERT INTO personas (
+          persona_nombre, 
+          persona_apellido, 
+          persona_dni, 
+          persona_telefono,
+          persona_fecha_alta
+        ) VALUES (?, ?, ?, ?, CURDATE())`,
+        [
+          cliente_invitado.nombre,
+          cliente_invitado.apellido,
+          cliente_invitado.dni || null,
+          cliente_invitado.telefono || null
+        ]
+      );
+      
+      const personaId = personaResult.insertId;
+      
+      // 2. Crear el cliente asociado a la persona
+      const [clienteResult] = await conn.query(
+        `INSERT INTO clientes (
+          persona_id,
+          cliente_email,
+          cliente_fecha_alta
+        ) VALUES (?, ?, CURRENT_TIMESTAMP)`,
+        [
+          personaId,
+          cliente_invitado.email
+        ]
+      );
+      
+      clienteId = clienteResult.insertId;
+      console.log(`Nuevo cliente creado con ID: ${clienteId}`);
+    }
+    
+    // 1. Crear la venta principal (ahora con el clienteId que puede ser el nuevo o el seleccionado)
     const [resultadoVenta] = await conn.query(
       `INSERT INTO ventas (
         cliente_id,
@@ -213,7 +260,7 @@ export const crearVenta = async (req, res) => {
         venta_nota
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        venta.cliente_id || null,
+        clienteId, // Ahora usamos el ID del cliente (nuevo o seleccionado)
         venta.cupon_id || null,
         venta.venta_estado_pago || 'pendiente',
         venta.venta_estado_envio || 'pendiente',
@@ -226,45 +273,118 @@ export const crearVenta = async (req, res) => {
     
     const ventaId = resultadoVenta.insertId;
     
-    // 2. Insertar productos en ventas_detalle
+    // 2. Insertar productos en ventas_detalle y actualizar stock
     for (const producto of productos) {
-      await conn.query(
-        `INSERT INTO ventas_detalle (
-          venta_id,
-          producto_id,
-          vd_variante_id,
-          detalle_cantidad,
-          detalle_precio_unitario
-        ) VALUES (?, ?, ?, ?, ?)`,
-        [
-          ventaId,
-          producto.producto_id,
-          producto.variante_id || null,
-          producto.cantidad,
-          producto.precio_unitario
-        ]
-      );
+      // Calcular el subtotal
+      const subtotal = producto.cantidad * producto.precio_unitario;
       
-      // 3. Actualizar stock si el pago está abonado
-      if (venta.venta_estado_pago === 'abonado') {
-        if (producto.variante_id) {
-          // Actualizar stock de variante
-          await conn.query(
-            `UPDATE stock SET cantidad = cantidad - ? WHERE variante_id = ?`,
-            [producto.cantidad, producto.variante_id]
-          );
-        } else {
-          // Actualizar stock de producto
-          await conn.query(
-            `UPDATE stock SET cantidad = cantidad - ? WHERE producto_id = ? AND variante_id IS NULL`,
-            [producto.cantidad, producto.producto_id]
-          );
+      // Obtener información adicional para respaldo
+      let producto_nombre = null;
+      let variante_descripcion = null;
+      
+      // Decidir si insertar como producto o como variante
+      if (producto.variante_id) {
+        // Obtener información de la variante para respaldo
+        const [varianteInfo] = await conn.query(
+          `SELECT 
+            p.producto_nombre,
+            GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') as descripcion
+           FROM variantes v
+           JOIN productos p ON v.producto_id = p.producto_id
+           LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id
+           LEFT JOIN atributos a ON vv.atributo_id = a.atributo_id
+           WHERE v.variante_id = ?
+           GROUP BY p.producto_nombre`,
+          [producto.variante_id]
+        );
+        
+        if (varianteInfo.length > 0) {
+          producto_nombre = varianteInfo[0].producto_nombre;
+          variante_descripcion = varianteInfo[0].descripcion;
         }
+        
+        // Si tiene variante_id, insertamos SOLO la variante (producto_id debe ser NULL)
+        await conn.query(
+          `INSERT INTO ventas_detalle (
+            venta_id,
+            producto_id,
+            variante_id,
+            combo_id,
+            vd_cantidad,
+            vd_precio_unitario,
+            vd_subtotal,
+            producto_nombre,
+            variante_descripcion
+          ) VALUES (?, NULL, ?, NULL, ?, ?, ?, ?, ?)`,
+          [
+            ventaId,
+            producto.variante_id,
+            producto.cantidad,
+            producto.precio_unitario,
+            subtotal,
+            producto_nombre,
+            variante_descripcion
+          ]
+        );
+        
+        // Actualizar stock de variante SIEMPRE
+        await conn.query(
+          `UPDATE stock SET cantidad = GREATEST(0, cantidad - ?) WHERE variante_id = ?`,
+          [producto.cantidad, producto.variante_id]
+        );
+        console.log(`Stock descontado para variante ${producto.variante_id}: -${producto.cantidad}`);
+      } else {
+        // Obtener nombre del producto para respaldo
+        const [productoInfo] = await conn.query(
+          `SELECT producto_nombre FROM productos WHERE producto_id = ?`,
+          [producto.producto_id]
+        );
+        
+        if (productoInfo.length > 0) {
+          producto_nombre = productoInfo[0].producto_nombre;
+        }
+        
+        // Si no tiene variante, insertamos SOLO el producto (variante_id debe ser NULL)
+        await conn.query(
+          `INSERT INTO ventas_detalle (
+            venta_id,
+            producto_id,
+            variante_id,
+            combo_id,
+            vd_cantidad,
+            vd_precio_unitario,
+            vd_subtotal,
+            producto_nombre
+          ) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?)`,
+          [
+            ventaId,
+            producto.producto_id,
+            producto.cantidad,
+            producto.precio_unitario,
+            subtotal,
+            producto_nombre
+          ]
+        );
+        
+        // Actualizar stock de producto SIEMPRE
+        await conn.query(
+          `UPDATE stock SET cantidad = GREATEST(0, cantidad - ?) WHERE producto_id = ? AND variante_id IS NULL`,
+          [producto.cantidad, producto.producto_id]
+        );
+        console.log(`Stock descontado para producto ${producto.producto_id}: -${producto.cantidad}`);
       }
     }
     
-    // 4. Si es cliente invitado y hay envío, guardar datos de envío
-    if (!venta.cliente_id && envio && cliente_invitado) {
+    // 4. Si hay datos de envío, guardarlos SIEMPRE cuando se proporcionen
+    if (envio) {
+      // Necesitamos los datos del cliente para registrar el envío
+      const nombreEnvio = cliente_invitado?.nombre || (await obtenerNombreCliente(conn, clienteId));
+      const apellidoEnvio = cliente_invitado?.apellido || (await obtenerApellidoCliente(conn, clienteId));
+      const emailEnvio = cliente_invitado?.email || (await obtenerEmailCliente(conn, clienteId));
+      const telefonoEnvio = cliente_invitado?.telefono || (await obtenerTelefonoCliente(conn, clienteId));
+      
+      console.log('Guardando datos de envío:', { ventaId, envio });
+      
       await conn.query(
         `INSERT INTO envios_invitados (
           venta_id,
@@ -282,10 +402,10 @@ export const crearVenta = async (req, res) => {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           ventaId,
-          cliente_invitado.nombre,
-          cliente_invitado.apellido,
-          cliente_invitado.email,
-          cliente_invitado.telefono || null,
+          nombreEnvio,
+          apellidoEnvio,
+          emailEnvio,
+          telefonoEnvio,
           envio.calle,
           envio.numero,
           envio.cp,
@@ -295,13 +415,16 @@ export const crearVenta = async (req, res) => {
           envio.provincia
         ]
       );
+      
+      console.log(`Datos de envío guardados exitosamente para la venta ${ventaId}`);
     }
     
     await conn.commit();
     
     res.status(201).json({
       message: 'Venta creada exitosamente',
-      venta_id: ventaId
+      venta_id: ventaId,
+      cliente_id: clienteId
     });
     
   } catch (error) {
@@ -312,6 +435,45 @@ export const crearVenta = async (req, res) => {
     conn.release();
   }
 };
+
+// Funciones auxiliares para obtener datos del cliente cuando sea necesario
+async function obtenerNombreCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_nombre FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_nombre : '';
+}
+
+async function obtenerApellidoCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_apellido FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_apellido : '';
+}
+
+async function obtenerEmailCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT cliente_email FROM clientes WHERE cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].cliente_email : '';
+}
+
+async function obtenerTelefonoCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_telefono FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_telefono : null;
+}
 
 /**
  * Cambia el estado de pago de una venta
@@ -347,60 +509,33 @@ export const actualizarEstadoPago = async (req, res) => {
       [estado_pago, id]
     );
     
-    // Si cambia de pendiente a abonado, actualizar stock
-    if (estadoActual === 'pendiente' && estado_pago === 'abonado') {
+    // Si cambia a estado cancelado, restaurar stock
+    if (estado_pago === 'cancelado') {
       const [productos] = await conn.query(
         `SELECT 
           producto_id, 
-          vd_variante_id, 
-          detalle_cantidad 
+          variante_id, 
+          vd_cantidad 
         FROM ventas_detalle 
         WHERE venta_id = ?`,
         [id]
       );
       
       for (const producto of productos) {
-        if (producto.vd_variante_id) {
-          // Actualizar stock de variante
-          await conn.query(
-            `UPDATE stock SET cantidad = cantidad - ? WHERE variante_id = ?`,
-            [producto.detalle_cantidad, producto.vd_variante_id]
-          );
-        } else {
-          // Actualizar stock de producto
-          await conn.query(
-            `UPDATE stock SET cantidad = cantidad - ? WHERE producto_id = ? AND variante_id IS NULL`,
-            [producto.detalle_cantidad, producto.producto_id]
-          );
-        }
-      }
-    }
-    
-    // Si cambia de abonado a pendiente o cancelado, restaurar stock
-    if (estadoActual === 'abonado' && (estado_pago === 'pendiente' || estado_pago === 'cancelado')) {
-      const [productos] = await conn.query(
-        `SELECT 
-          producto_id, 
-          vd_variante_id, 
-          detalle_cantidad 
-        FROM ventas_detalle 
-        WHERE venta_id = ?`,
-        [id]
-      );
-      
-      for (const producto of productos) {
-        if (producto.vd_variante_id) {
+        if (producto.variante_id) {
           // Restaurar stock de variante
           await conn.query(
             `UPDATE stock SET cantidad = cantidad + ? WHERE variante_id = ?`,
-            [producto.detalle_cantidad, producto.vd_variante_id]
+            [producto.vd_cantidad, producto.variante_id]
           );
-        } else {
+          console.log(`Stock restaurado para variante ${producto.variante_id}: +${producto.vd_cantidad}`);
+        } else if (producto.producto_id) {
           // Restaurar stock de producto
           await conn.query(
             `UPDATE stock SET cantidad = cantidad + ? WHERE producto_id = ? AND variante_id IS NULL`,
-            [producto.detalle_cantidad, producto.producto_id]
+            [producto.vd_cantidad, producto.producto_id]
           );
+          console.log(`Stock restaurado para producto ${producto.producto_id}: +${producto.vd_cantidad}`);
         }
       }
     }
@@ -468,7 +603,16 @@ export const buscarProductosParaVenta = async (req, res) => {
           p.producto_nombre,
           p.producto_precio_venta,
           p.producto_precio_oferta,
-          COALESCE(s.cantidad, 0) AS stock,
+          CASE
+            WHEN EXISTS (SELECT 1 FROM variantes v WHERE v.producto_id = p.producto_id AND v.variante_estado = 'activo')
+            THEN (
+              SELECT COALESCE(SUM(s.cantidad), 0)
+              FROM variantes v 
+              LEFT JOIN stock s ON s.variante_id = v.variante_id
+              WHERE v.producto_id = p.producto_id AND v.variante_estado = 'activo'
+            )
+            ELSE COALESCE(s.cantidad, 0) 
+          END AS stock,
           ip.imagen_url
         FROM productos p
         LEFT JOIN stock s ON s.producto_id = p.producto_id AND s.variante_id IS NULL
@@ -494,7 +638,16 @@ export const buscarProductosParaVenta = async (req, res) => {
         p.producto_nombre,
         p.producto_precio_venta,
         p.producto_precio_oferta,
-        COALESCE(s.cantidad, 0) AS stock,
+        CASE
+          WHEN EXISTS (SELECT 1 FROM variantes v WHERE v.producto_id = p.producto_id AND v.variante_estado = 'activo')
+          THEN (
+            SELECT COALESCE(SUM(s.cantidad), 0)
+            FROM variantes v 
+            LEFT JOIN stock s ON s.variante_id = v.variante_id
+            WHERE v.producto_id = p.producto_id AND v.variante_estado = 'activo'
+          )
+          ELSE COALESCE(s.cantidad, 0) 
+        END AS stock,
         ip.imagen_url
       FROM productos p
       LEFT JOIN stock s ON s.producto_id = p.producto_id AND s.variante_id IS NULL
@@ -531,6 +684,7 @@ export const obtenerVariantesProducto = async (req, res) => {
   const { producto_id } = req.params;
   
   try {
+    // Primera consulta para obtener datos básicos de las variantes
     const [variantes] = await pool.query(`
       SELECT 
         v.variante_id,
@@ -539,8 +693,7 @@ export const obtenerVariantesProducto = async (req, res) => {
         v.variante_sku,
         COALESCE(s.cantidad, 0) AS stock,
         ip.imagen_url,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS descripcion,
-        JSON_OBJECTAGG(a.atributo_nombre, vv.valor_nombre) AS atributos
+        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS descripcion
       FROM variantes v
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
@@ -549,6 +702,26 @@ export const obtenerVariantesProducto = async (req, res) => {
       WHERE v.producto_id = ? AND v.variante_estado = 'activo'
       GROUP BY v.variante_id, v.variante_precio_venta, v.variante_precio_oferta, v.variante_sku, s.cantidad, ip.imagen_url
     `, [producto_id]);
+    
+    // Para cada variante, obtener sus atributos como pares clave-valor
+    for (const variante of variantes) {
+      const [atributos] = await pool.query(`
+        SELECT 
+          a.atributo_nombre, 
+          vv.valor_nombre
+        FROM valores_variantes vv
+        JOIN atributos a ON a.atributo_id = vv.atributo_id
+        WHERE vv.variante_id = ?
+      `, [variante.variante_id]);
+      
+      // Crear un objeto con los atributos
+      const atributosObj = {};
+      atributos.forEach(attr => {
+        atributosObj[attr.atributo_nombre] = attr.valor_nombre;
+      });
+      
+      variante.atributos = atributosObj;
+    }
     
     res.status(200).json(variantes);
     
@@ -616,3 +789,13 @@ export const verificarStock = async (req, res) => {
     res.status(500).json({ message: 'Error interno al verificar stock.' });
   }
 };
+
+/**
+ * Obtiene los orígenes de venta disponibles
+ */
+export const origenesVenta = [
+  { value: 'Venta Manual', label: 'Venta Manual' },
+  { value: 'Redes Sociales', label: 'Redes Sociales' },
+  { value: 'Whatsapp', label: 'Whatsapp' },
+  { value: 'Presencial', label: 'Presencial' }
+];

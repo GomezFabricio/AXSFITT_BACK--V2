@@ -357,22 +357,26 @@ CREATE TABLE ventas (
 
 CREATE TABLE ventas_detalle (
   vd_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  vd_venta_id INTEGER UNSIGNED NOT NULL,
-  vd_producto_id INTEGER UNSIGNED NULL,
-  vd_variante_id INTEGER UNSIGNED NULL,
-  vd_combo_id INTEGER UNSIGNED NULL,
+  venta_id INTEGER UNSIGNED NOT NULL,
+  producto_id INTEGER UNSIGNED NULL,
+  variante_id INTEGER UNSIGNED NULL,
+  combo_id INTEGER UNSIGNED NULL,
   vd_cantidad INTEGER UNSIGNED NOT NULL,
   vd_precio_unitario DECIMAL(10, 2) NOT NULL,
   vd_subtotal DECIMAL(10, 2) NOT NULL,
+  producto_nombre VARCHAR(255) NULL,
+  variante_descripcion VARCHAR(255) NULL,
+  combo_nombre VARCHAR(255) NULL,
   PRIMARY KEY(vd_id),
-  FOREIGN KEY(vd_venta_id) REFERENCES ventas(venta_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY(vd_producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY(vd_variante_id) REFERENCES variantes(variante_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY(vd_combo_id) REFERENCES combos(combo_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(venta_id) REFERENCES ventas(venta_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY(producto_id) REFERENCES productos(producto_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY(variante_id) REFERENCES variantes(variante_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY(combo_id) REFERENCES combos(combo_id) ON DELETE SET NULL ON UPDATE CASCADE,
   CHECK (
-    (vd_producto_id IS NOT NULL AND vd_variante_id IS NULL AND vd_combo_id IS NULL) OR
-    (vd_producto_id IS NULL AND vd_variante_id IS NOT NULL AND vd_combo_id IS NULL) OR
-    (vd_producto_id IS NULL AND vd_variante_id IS NULL AND vd_combo_id IS NOT NULL)
+    (producto_id IS NOT NULL AND variante_id IS NULL AND combo_id IS NULL) OR
+    (producto_id IS NULL AND variante_id IS NOT NULL AND combo_id IS NULL) OR
+    (producto_id IS NULL AND variante_id IS NULL AND combo_id IS NOT NULL) OR
+    (producto_id IS NULL AND variante_id IS NULL AND combo_id IS NULL AND producto_nombre IS NOT NULL)
   )
 );
 

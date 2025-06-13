@@ -25,8 +25,8 @@
     2.7 Modificar Producto (permiso interno, NO visible en menú)
     2.8 Eliminar Producto (permiso interno, NO visible en menú)
     2.9 Ver Productos (permiso visible en menú, asociado al modulo 2)
-    2.10 Utilidades Productos (submodulo de modulo 2)
-        2.10.1 Aumentar Precios (permiso visible en menú, asociado a submodulo 2.10)
+    2.10 Utilidades Productos (submodulo de modulo 2) //Esto NO
+        2.10.1 Aumentar Precios (permiso visible en menú, asociado a submodulo 2.10) //Esto NO
     2.11 Stock (submodulo de modulo 2)
         2.11.1 Gestionar Stock (permiso visible en menú, asociado a submodulo 2.11)
             2.11.1.1 Establecer Stock (permiso interno, NO visible en menú, asociado a submodulo 2.11.1)
@@ -42,9 +42,9 @@
         3.3.3 Modificar Cliente (permiso interno, NO visible en menú)
         3.3.4 Eliminar Cliente (permiso interno, NO visible en menú)
     3.4 Metricas (permiso visible en menú, asociado a modulo 3)
-    3.5 Metodos de Pago (permiso visible en menú, asociado a modulo 3)
-    3.6 Metodos de Envio (permiso visible en menú, asociado a modulo 3)
-    3.7 Logistica (permiso visible en menú, asociado a modulo 3)
-    3.8 Promociones (submodulo de modulo 3)
-        3.8.1 Ofertas (permiso visible en menú, asociado a submodulo 3.8)
-        3.8.2 Cupones de Descuento (permiso visible en menú, asociado a submodulo 3.8)
+    3.5 Metodos de Pago (permiso visible en menú, asociado a modulo 3) //Esto NO
+    3.6 Metodos de Envio (permiso visible en menú, asociado a modulo 3)//Esto NO
+    3.7 Logistica (permiso visible en menú, asociado a modulo 3) //Esto NO
+    3.8 Promociones (submodulo de modulo 3) //Esto NO
+        3.8.1 Ofertas (permiso visible en menú, asociado a submodulo 3.8) //Esto NO
+        3.8.2 Cupones de Descuento (permiso visible en menú, asociado a submodulo 3.8) //Esto NO

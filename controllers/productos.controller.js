@@ -1255,7 +1255,7 @@ export const verificarVentasVariante = async (req, res) => {
 
   try {
     const [result] = await pool.query(
-      `SELECT COUNT(*) AS total FROM ventas_detalle WHERE vd_variante_id = ?`,
+      `SELECT COUNT(*) AS total FROM ventas_detalle WHERE variante_id = ?`,
       [variante_id]
     );
 
