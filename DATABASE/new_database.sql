@@ -394,6 +394,7 @@ CREATE TABLE envios_invitados (
   envinv_ciudad VARCHAR(100) NOT NULL,
   envinv_provincia VARCHAR(100) NOT NULL,
   envio_telefono VARCHAR(20) NULL,
+  envio_estado ENUM('pendiente', 'enviado', 'cancelado') DEFAULT 'pendiente',
   PRIMARY KEY(envio_invitado_id),
   FOREIGN KEY(venta_id)
     REFERENCES ventas(venta_id)

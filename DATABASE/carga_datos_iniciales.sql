@@ -31,8 +31,8 @@ INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 -- 3 Gestión de ventas
 INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 (NULL, 'Gestión de ventas'),              -- 7
-(7, 'Clientes'),                          -- 8 (Nuevo submódulo de Clientes)
-(7, 'Promociones');                       -- 9 (Antes era 8)
+(7, 'Clientes'),                          -- 8 
+(7, 'Promociones');                       -- 9 
 
 -- 7. Permisos con rutas asociadas y visibilidad en menú
 -- Administración del Sistema
@@ -79,6 +79,7 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 -- Módulo 3: Gestión de ventas
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
 (7, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
+(7, 'Modificar Venta', NULL, FALSE),                     -- 3.1.2 (NUEVO PERMISO)
 (7, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
 (7, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4 (Se mantiene el ID)
 (7, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5 (Se mantiene el ID)
@@ -129,18 +130,19 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 
 -- Gestión de ventas
 (1, 7, 25),  -- Listado de Ventas
-(1, 7, 26),  -- Agregar Venta
-(1, 7, 27),  -- Metricas
-(1, 7, 28),  -- Metodos de Pago
-(1, 7, 29),  -- Metodos de Envio
-(1, 7, 30),  -- Logistica
+(1, 7, 26),  -- Modificar Venta 
+(1, 7, 27),  -- Agregar Venta
+(1, 7, 28),  -- Metricas
+(1, 7, 29),  -- Metodos de Pago
+(1, 7, 30),  -- Metodos de Envio
+(1, 7, 31),  -- Logistica
 
 -- Submódulo Clientes (Nuevo)
-(1, 8, 31),  -- Agregar Cliente
-(1, 8, 32),  -- Ver Clientes 
-(1, 8, 33),  -- Modificar Cliente
-(1, 8, 34),  -- Eliminar Cliente
+(1, 8, 32),  -- Agregar Cliente
+(1, 8, 33),  -- Ver Clientes 
+(1, 8, 34),  -- Modificar Cliente
+(1, 8, 35),  -- Eliminar Cliente
 
--- Submódulo Promociones (Antes era 8, ahora es 9)
-(1, 9, 35),  -- Ofertas
-(1, 9, 36);  -- Cupones de Descuento
+-- Submódulo Promociones 
+(1, 9, 36),  -- Ofertas
+(1, 9, 37);  -- Cupones de Descuento
