@@ -13,6 +13,7 @@ export const obtenerClientes = async (req, res) => {
         p.persona_fecha_nac,
         p.persona_domicilio,
         p.persona_telefono,
+        c.cliente_email,
         c.cliente_fecha_alta
       FROM clientes c
       JOIN personas p ON c.persona_id = p.persona_id
@@ -42,6 +43,7 @@ export const obtenerClientePorId = async (req, res) => {
         p.persona_fecha_nac,
         p.persona_domicilio,
         p.persona_telefono,
+        c.cliente_email,
         c.cliente_fecha_alta
       FROM clientes c
       JOIN personas p ON c.persona_id = p.persona_id
@@ -67,13 +69,14 @@ export const crearCliente = async (req, res) => {
     persona_dni, 
     persona_fecha_nac, 
     persona_domicilio,
-    persona_telefono
+    persona_telefono,
+    cliente_email // Nuevo campo obligatorio
   } = req.body;
   
   // Validar campos obligatorios
-  if (!persona_nombre || !persona_apellido || !persona_dni) {
+  if (!persona_nombre || !persona_apellido || !persona_dni || !persona_telefono || !cliente_email) {
     return res.status(400).json({ 
-      message: 'Nombre, apellido y DNI son campos obligatorios.' 
+      message: 'Nombre, apellido, DNI, teléfono y email son campos obligatorios.' 
     });
   }
   
@@ -98,20 +101,22 @@ export const crearCliente = async (req, res) => {
         persona_dni,
         persona_fecha_nac || null,
         persona_domicilio || null,
-        persona_telefono || null
+        persona_telefono // Ya no es opcional
       ]
     );
     
     const persona_id = personaResult.insertId;
     
-    // 2. Crear el cliente asociado a la persona (sin email temporal)
+    // 2. Crear el cliente asociado a la persona (ahora con email)
     const [clienteResult] = await conn.query(
       `INSERT INTO clientes (
         persona_id,
+        cliente_email,
         cliente_fecha_alta
-      ) VALUES (?, CURRENT_TIMESTAMP)`,
+      ) VALUES (?, ?, CURRENT_TIMESTAMP)`,
       [
-        persona_id
+        persona_id,
+        cliente_email
       ]
     );
     
@@ -126,9 +131,14 @@ export const crearCliente = async (req, res) => {
     await conn.rollback();
     console.error('Error al crear cliente:', error);
     
-    // Verificar si el error es por DNI duplicado
-    if (error.code === 'ER_DUP_ENTRY' && error.sqlMessage.includes('persona_dni')) {
-      return res.status(400).json({ message: 'Ya existe un cliente con ese DNI.' });
+    // Verificar si el error es por DNI duplicado o email duplicado
+    if (error.code === 'ER_DUP_ENTRY') {
+      if (error.sqlMessage.includes('persona_dni')) {
+        return res.status(400).json({ message: 'Ya existe un cliente con ese DNI.' });
+      }
+      if (error.sqlMessage.includes('cliente_email')) {
+        return res.status(400).json({ message: 'Ya existe un cliente con ese email.' });
+      }
     }
     
     res.status(500).json({ message: 'Error interno al crear el cliente.' });
@@ -146,13 +156,14 @@ export const actualizarCliente = async (req, res) => {
     persona_dni, 
     persona_fecha_nac, 
     persona_domicilio,
-    persona_telefono
+    persona_telefono,
+    cliente_email // Nuevo campo obligatorio
   } = req.body;
   
   // Validar campos obligatorios
-  if (!persona_nombre || !persona_apellido || !persona_dni) {
+  if (!persona_nombre || !persona_apellido || !persona_dni || !persona_telefono || !cliente_email) {
     return res.status(400).json({ 
-      message: 'Nombre, apellido y DNI son campos obligatorios.' 
+      message: 'Nombre, apellido, DNI, teléfono y email son campos obligatorios.' 
     });
   }
   
@@ -188,8 +199,19 @@ export const actualizarCliente = async (req, res) => {
         persona_dni,
         persona_fecha_nac || null,
         persona_domicilio || null,
-        persona_telefono || null,
+        persona_telefono, // Ya no es opcional
         persona_id
+      ]
+    );
+    
+    // Actualizar el email del cliente
+    await conn.query(
+      `UPDATE clientes SET
+        cliente_email = ?
+      WHERE cliente_id = ?`,
+      [
+        cliente_email,
+        id
       ]
     );
     
@@ -204,9 +226,14 @@ export const actualizarCliente = async (req, res) => {
     await conn.rollback();
     console.error('Error al actualizar cliente:', error);
     
-    // Verificar si el error es por DNI duplicado
-    if (error.code === 'ER_DUP_ENTRY' && error.sqlMessage.includes('persona_dni')) {
-      return res.status(400).json({ message: 'Ya existe otro cliente con ese DNI.' });
+    // Verificar si el error es por DNI duplicado o email duplicado
+    if (error.code === 'ER_DUP_ENTRY') {
+      if (error.sqlMessage.includes('persona_dni')) {
+        return res.status(400).json({ message: 'Ya existe otro cliente con ese DNI.' });
+      }
+      if (error.sqlMessage.includes('cliente_email')) {
+        return res.status(400).json({ message: 'Ya existe otro cliente con ese email.' });
+      }
     }
     
     res.status(500).json({ message: 'Error interno al actualizar el cliente.' });
@@ -270,6 +297,7 @@ export const buscarClientes = async (req, res) => {
         p.persona_fecha_nac,
         p.persona_domicilio,
         p.persona_telefono,
+        c.cliente_email,
         c.cliente_fecha_alta
       FROM clientes c
       JOIN personas p ON c.persona_id = p.persona_id
@@ -279,10 +307,11 @@ export const buscarClientes = async (req, res) => {
           p.persona_nombre LIKE ? OR
           p.persona_apellido LIKE ? OR
           p.persona_dni LIKE ? OR
+          c.cliente_email LIKE ? OR
           CONCAT(p.persona_nombre, ' ', p.persona_apellido) LIKE ?
         )
       ORDER BY p.persona_apellido, p.persona_nombre
-    `, [`%${termino}%`, `%${termino}%`, `%${termino}%`, `%${termino}%`]);
+    `, [`%${termino}%`, `%${termino}%`, `%${termino}%`, `%${termino}%`, `%${termino}%`]);
     
     res.status(200).json(clientes);
   } catch (error) {
@@ -304,6 +333,7 @@ export const obtenerClientesEliminados = async (req, res) => {
         p.persona_fecha_nac,
         p.persona_domicilio,
         p.persona_telefono,
+        c.cliente_email,
         c.cliente_fecha_alta,
         c.cliente_fecha_baja
       FROM clientes c
