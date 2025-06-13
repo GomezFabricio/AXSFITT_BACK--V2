@@ -341,7 +341,7 @@ CREATE TABLE promociones (
 
 CREATE TABLE ventas (
   venta_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  cliente_id INTEGER UNSIGNED NOT NULL,
+  cliente_id INTEGER UNSIGNED NULL, -- Modificado a NULL para permitir ventas a invitados
   cupon_id INTEGER UNSIGNED NULL,
   venta_fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   venta_estado_pago ENUM('pendiente', 'abonado', 'cancelado') DEFAULT 'pendiente',
@@ -351,14 +351,8 @@ CREATE TABLE ventas (
   venta_origen ENUM('Venta Manual', 'Redes Sociales', 'Whatsapp', 'Presecial') DEFAULT 'Venta Manual',
   venta_nota TEXT NULL,
   PRIMARY KEY(venta_id),
-  FOREIGN KEY(cliente_id)
-    REFERENCES clientes(cliente_id)
-    ON DELETE NO ACTION
-    ON UPDATE CASCADE,
-  FOREIGN KEY(cupon_id)
-    REFERENCES cupones(cupon_id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE
+  FOREIGN KEY(cliente_id) REFERENCES clientes(cliente_id) ON DELETE NO ACTION ON UPDATE CASCADE,
+  FOREIGN KEY(cupon_id) REFERENCES cupones(cupon_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 CREATE TABLE ventas_detalle (
@@ -385,6 +379,10 @@ CREATE TABLE ventas_detalle (
 CREATE TABLE envios_invitados (
   envio_invitado_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   venta_id INTEGER UNSIGNED NOT NULL,
+  envinv_nombre VARCHAR(60) NOT NULL, 
+  envinv_apellido VARCHAR(60) NOT NULL, 
+  envinv_email VARCHAR(100) NOT NULL, 
+  envinv_telefono VARCHAR(20) NULL,
   envinv_calle VARCHAR(150) NOT NULL,
   envinv_numero VARCHAR(20) NOT NULL,
   envinv_cp VARCHAR(10) NOT NULL,
@@ -393,9 +391,6 @@ CREATE TABLE envios_invitados (
   envinv_ciudad VARCHAR(100) NOT NULL,
   envinv_provincia VARCHAR(100) NOT NULL,
   PRIMARY KEY(envio_invitado_id),
-  FOREIGN KEY(venta_id)
-    REFERENCES ventas(venta_id)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
+  FOREIGN KEY(venta_id) REFERENCES ventas(venta_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
