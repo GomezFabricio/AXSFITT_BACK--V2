@@ -18,7 +18,7 @@ const router = Router();
 router.get(
   '/', 
   authenticate, 
-  validarPermisos('Ver Ventas'), 
+  validarPermisos('Listado de Ventas'), 
   obtenerVentas
 );
 
@@ -26,7 +26,7 @@ router.get(
 router.get(
   '/:id', 
   authenticate, 
-  validarPermisos('Ver Ventas'), 
+  validarPermisos('Listado de Ventas'), 
   obtenerVentaPorId
 );
 
