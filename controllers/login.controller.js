@@ -2,6 +2,7 @@ import { pool } from '../db.js';
 import jwt from 'jsonwebtoken';
 import { SECRET_KEY } from '../config.js';
 import bcrypt from 'bcrypt';
+import transporter from '../emailConfig.js';
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
@@ -156,5 +157,137 @@ export const obtenerPersonaIdDesdeToken = (req) => {
     return decoded.usuario_id || null;
   } catch (error) {
     return null;
+  }
+};
+
+// Nueva función para solicitar recuperación de contraseña
+export const solicitarRecuperacionPassword = async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: 'El email es obligatorio' });
+  }
+
+  try {
+    // Verificar si el usuario existe
+    const [usuarios] = await pool.query(
+      'SELECT usuario_id, usuario_email FROM usuarios WHERE usuario_email = ?',
+      [email]
+    );
+
+    if (usuarios.length === 0) {
+      // Por seguridad, no informamos si el email existe o no
+      return res.status(200).json({
+        message: 'Si el email está registrado, recibirás un enlace para restablecer tu contraseña'
+      });
+    }
+
+    const usuario = usuarios[0];
+
+    // Crear un token JWT que expira en 24 horas
+    const resetToken = jwt.sign(
+      { 
+        usuario_id: usuario.usuario_id,
+        email: usuario.usuario_email,
+        tipo: 'password_reset' // Marcar como token de recuperación
+      },
+      SECRET_KEY,
+      { expiresIn: '24h' }
+    );
+
+    // URL de recuperación
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/restablecer-password/${resetToken}`;
+
+    // Enviar email
+    await transporter.sendMail({
+      from: '"AXSFITT" <noreply@axsfitt.com>',
+      to: email,
+      subject: 'Recuperación de contraseña',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #6d28d9;">Recuperación de Contraseña</h2>
+          <p>Hemos recibido una solicitud para restablecer tu contraseña.</p>
+          <p>Para continuar, haz clic en el siguiente enlace:</p>
+          <p>
+            <a 
+              href="${resetUrl}" 
+              style="background-color: #6d28d9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;"
+            >
+              Restablecer Contraseña
+            </a>
+          </p>
+          <p>Este enlace expirará en 24 horas.</p>
+          <p>Si no solicitaste este cambio, puedes ignorar este correo.</p>
+          <p>Saludos,<br/>El equipo de AXSFITT</p>
+        </div>
+      `
+    });
+
+    res.status(200).json({
+      message: 'Si el email está registrado, recibirás un enlace para restablecer tu contraseña'
+    });
+  } catch (error) {
+    console.error('Error al solicitar recuperación de contraseña:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Verificar token de recuperación
+export const verificarTokenRecuperacion = async (req, res) => {
+  const { token } = req.params;
+
+  try {
+    // Verificar el token
+    const decoded = jwt.verify(token, SECRET_KEY);
+    
+    // Verificar que sea un token de recuperación
+    if (!decoded || decoded.tipo !== 'password_reset') {
+      return res.status(400).json({ message: 'Token inválido' });
+    }
+
+    res.status(200).json({ message: 'Token válido' });
+  } catch (error) {
+    console.error('Error al verificar token:', error);
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({ message: 'El enlace ha expirado' });
+    }
+    res.status(400).json({ message: 'Token inválido o expirado' });
+  }
+};
+
+// Restablecer contraseña
+export const restablecerPassword = async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ message: 'Todos los campos son obligatorios' });
+  }
+
+  try {
+    // Verificar el token
+    const decoded = jwt.verify(token, SECRET_KEY);
+    
+    // Verificar que sea un token de recuperación
+    if (!decoded || decoded.tipo !== 'password_reset') {
+      return res.status(400).json({ message: 'Token inválido' });
+    }
+
+    // Hashear nueva contraseña
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Actualizar contraseña
+    await pool.query(
+      'UPDATE usuarios SET usuario_pass = ? WHERE usuario_id = ?',
+      [hashedPassword, decoded.usuario_id]
+    );
+
+    res.status(200).json({ message: 'Contraseña actualizada exitosamente' });
+  } catch (error) {
+    console.error('Error al restablecer contraseña:', error);
+    if (error.name === 'TokenExpiredError') {
+      return res.status(400).json({ message: 'El enlace ha expirado' });
+    }
+    res.status(500).json({ message: 'Error interno del servidor' });
   }
 };
