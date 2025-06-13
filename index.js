@@ -14,6 +14,7 @@
    import CategoriasRoutes from './routes/categorias.routes.js';
    import ProductosRoutes from './routes/productos.routes.js';
    import StockRoutes from './routes/stock.routes.js';
+   import ClientesRoutes from './routes/clientes.routes.js';
 
    const __filename = fileURLToPath(import.meta.url);
    const __dirname = dirname(__filename);
@@ -35,6 +36,7 @@
    app.use('/api/categorias', CategoriasRoutes);
    app.use('/api/productos', ProductosRoutes);
    app.use('/api/stock', StockRoutes);
+   app.use('/api/clientes', ClientesRoutes);
 
    app.get('/', (req, res) => {
        res.send('Servidor funcionando correctamente');

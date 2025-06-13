@@ -31,7 +31,8 @@ INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 -- 3 Gestión de ventas
 INSERT INTO modulos (modulo_padre_id, modulo_descripcion) VALUES
 (NULL, 'Gestión de ventas'),              -- 7
-(7, 'Promociones');                       -- 8
+(7, 'Clientes'),                          -- 8 (Nuevo submódulo de Clientes)
+(7, 'Promociones');                       -- 9 (Antes era 8)
 
 -- 7. Permisos con rutas asociadas y visibilidad en menú
 -- Administración del Sistema
@@ -79,16 +80,22 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
 (7, 'Listado de Ventas', '/ventas', TRUE),               -- 3.1
 (7, 'Agregar Venta', '/ventas/agregar', TRUE),           -- 3.2
-(7, 'Clientes', '/ventas/clientes', TRUE),               -- 3.3
-(7, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4
-(7, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5
-(7, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6
-(7, 'Logistica', '/ventas/logistica', TRUE);             -- 3.7
+(7, 'Metricas', '/ventas/metricas', TRUE),               -- 3.4 (Se mantiene el ID)
+(7, 'Metodos de Pago', '/ventas/metodos-pago', TRUE),    -- 3.5 (Se mantiene el ID)
+(7, 'Metodos de Envio', '/ventas/metodos-envio', TRUE),  -- 3.6 (Se mantiene el ID)
+(7, 'Logistica', '/ventas/logistica', TRUE);             -- 3.7 (Se mantiene el ID)
 
--- Submódulo 3.8: Promociones
+-- Submódulo 3.3: Clientes (Nuevo)
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(8, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
-(8, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
+(8, 'Agregar Cliente', '/ventas/clientes/agregar', TRUE),     -- 3.3.1
+(8, 'Ver Clientes', '/ventas/clientes', TRUE),                -- 3.3.2
+(8, 'Modificar Cliente', NULL, FALSE),                        -- 3.3.3
+(8, 'Eliminar Cliente', NULL, FALSE);                         -- 3.3.4
+
+-- Submódulo 3.8: Promociones (Ahora es 3.8, antes era 3.3)
+INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
+(9, 'Ofertas', '/ventas/promociones/ofertas', TRUE),     -- 3.8.1
+(9, 'Cupones de Descuento', '/ventas/promociones/cupones', TRUE); -- 3.8.2
 
 -- 8. Asignar todos los permisos al perfil (perfiles_modulos_permisos)
 INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
@@ -123,10 +130,17 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 -- Gestión de ventas
 (1, 7, 25),  -- Listado de Ventas
 (1, 7, 26),  -- Agregar Venta
-(1, 7, 27),  -- Clientes
-(1, 7, 28),  -- Metricas
-(1, 7, 29),  -- Metodos de Pago
-(1, 7, 30),  -- Metodos de Envio
-(1, 7, 31),  -- Logistica
-(1, 8, 32),  -- Ofertas
-(1, 8, 33);  -- Cupones de Descuento
+(1, 7, 27),  -- Metricas
+(1, 7, 28),  -- Metodos de Pago
+(1, 7, 29),  -- Metodos de Envio
+(1, 7, 30),  -- Logistica
+
+-- Submódulo Clientes (Nuevo)
+(1, 8, 31),  -- Agregar Cliente
+(1, 8, 32),  -- Ver Clientes 
+(1, 8, 33),  -- Modificar Cliente
+(1, 8, 34),  -- Eliminar Cliente
+
+-- Submódulo Promociones (Antes era 8, ahora es 9)
+(1, 9, 35),  -- Ofertas
+(1, 9, 36);  -- Cupones de Descuento

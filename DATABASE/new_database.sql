@@ -118,7 +118,7 @@ CREATE TABLE perfiles_modulos_permisos (
 CREATE TABLE clientes (
   cliente_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   persona_id INTEGER UNSIGNED NOT NULL,
-  cliente_email VARCHAR(100) NOT NULL UNIQUE,
+  cliente_email VARCHAR(100) NULL UNIQUE,
   cliente_password VARCHAR(255) NULL,
   cliente_google_id VARCHAR(255) NULL,
   cliente_fecha_alta TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -267,7 +267,7 @@ CREATE TABLE faltantes (
   fecha_deteccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   cantidad_faltante INT UNSIGNED NOT NULL,
   resuelto BOOLEAN DEFAULT FALSE,
-  PRIMARY KEY (id),
+  PRIMARY KEY (id_faltante),
   FOREIGN KEY (producto_id) REFERENCES productos(producto_id) ON DELETE SET NULL ON UPDATE CASCADE,
   FOREIGN KEY (variante_id) REFERENCES variantes(variante_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
