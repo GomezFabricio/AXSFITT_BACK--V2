@@ -140,7 +140,6 @@ CREATE TABLE datos_envio (
   env_depto VARCHAR(10) NULL,
   env_ciudad VARCHAR(100) NOT NULL,
   env_provincia VARCHAR(100) NOT NULL,
-  envio_telefono VARCHAR(20) NULL,
   envio_predeterminado BOOLEAN DEFAULT FALSE,
   PRIMARY KEY(envio_id),
   FOREIGN KEY(cliente_id)
@@ -348,6 +347,9 @@ CREATE TABLE ventas (
   venta_estado_pago ENUM('pendiente', 'abonado', 'cancelado') DEFAULT 'pendiente',
   venta_estado_envio ENUM('pendiente', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente',
   venta_monto_total DECIMAL(10, 2) NOT NULL,
+  venta_monto_descuento DECIMAL(10, 2) DEFAULT 0.00,
+  venta_origen ENUM('Venta Manual', 'Redes Sociales', 'Whatsapp', 'Presecial') DEFAULT 'web',
+  venta_nota TEXT NULL,
   PRIMARY KEY(venta_id),
   FOREIGN KEY(cliente_id)
     REFERENCES clientes(cliente_id)
@@ -383,9 +385,6 @@ CREATE TABLE ventas_detalle (
 CREATE TABLE envios_invitados (
   envio_invitado_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
   venta_id INTEGER UNSIGNED NOT NULL,
-  envio_nombre VARCHAR(100) NOT NULL,
-  envio_apellido VARCHAR(100) NOT NULL,
-  envio_email VARCHAR(100) NOT NULL,
   envinv_calle VARCHAR(150) NOT NULL,
   envinv_numero VARCHAR(20) NOT NULL,
   envinv_cp VARCHAR(10) NOT NULL,
@@ -393,8 +392,6 @@ CREATE TABLE envios_invitados (
   envinv_depto VARCHAR(10) NULL,
   envinv_ciudad VARCHAR(100) NOT NULL,
   envinv_provincia VARCHAR(100) NOT NULL,
-  envio_telefono VARCHAR(20) NULL,
-  envio_estado ENUM('pendiente', 'enviado', 'cancelado') DEFAULT 'pendiente',
   PRIMARY KEY(envio_invitado_id),
   FOREIGN KEY(venta_id)
     REFERENCES ventas(venta_id)
