@@ -348,7 +348,7 @@ CREATE TABLE ventas (
   venta_estado_envio ENUM('pendiente', 'enviado', 'entregado', 'cancelado') DEFAULT 'pendiente',
   venta_monto_total DECIMAL(10, 2) NOT NULL,
   venta_monto_descuento DECIMAL(10, 2) DEFAULT 0.00,
-  venta_origen ENUM('Venta Manual', 'Redes Sociales', 'Whatsapp', 'Presecial') DEFAULT 'web',
+  venta_origen ENUM('Venta Manual', 'Redes Sociales', 'Whatsapp', 'Presecial') DEFAULT 'Venta Manual',
   venta_nota TEXT NULL,
   PRIMARY KEY(venta_id),
   FOREIGN KEY(cliente_id)
