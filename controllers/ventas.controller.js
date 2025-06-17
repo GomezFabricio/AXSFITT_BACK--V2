@@ -436,45 +436,6 @@ export const crearVenta = async (req, res) => {
   }
 };
 
-// Funciones auxiliares para obtener datos del cliente cuando sea necesario
-async function obtenerNombreCliente(conn, clienteId) {
-  const [resultado] = await conn.query(
-    `SELECT p.persona_nombre FROM personas p 
-     JOIN clientes c ON p.persona_id = c.persona_id 
-     WHERE c.cliente_id = ?`,
-    [clienteId]
-  );
-  return resultado.length > 0 ? resultado[0].persona_nombre : '';
-}
-
-async function obtenerApellidoCliente(conn, clienteId) {
-  const [resultado] = await conn.query(
-    `SELECT p.persona_apellido FROM personas p 
-     JOIN clientes c ON p.persona_id = c.persona_id 
-     WHERE c.cliente_id = ?`,
-    [clienteId]
-  );
-  return resultado.length > 0 ? resultado[0].persona_apellido : '';
-}
-
-async function obtenerEmailCliente(conn, clienteId) {
-  const [resultado] = await conn.query(
-    `SELECT cliente_email FROM clientes WHERE cliente_id = ?`,
-    [clienteId]
-  );
-  return resultado.length > 0 ? resultado[0].cliente_email : '';
-}
-
-async function obtenerTelefonoCliente(conn, clienteId) {
-  const [resultado] = await conn.query(
-    `SELECT p.persona_telefono FROM personas p 
-     JOIN clientes c ON p.persona_id = c.persona_id 
-     WHERE c.cliente_id = ?`,
-    [clienteId]
-  );
-  return resultado.length > 0 ? resultado[0].persona_telefono : null;
-}
-
 /**
  * Cambia el estado de pago de una venta
  */
@@ -832,16 +793,6 @@ export const verificarStock = async (req, res) => {
   }
 };
 
-/**
- * Obtiene los orígenes de venta disponibles
- */
-export const origenesVenta = [
-  { value: 'Venta Manual', label: 'Venta Manual' },
-  { value: 'Redes Sociales', label: 'Redes Sociales' },
-  { value: 'Whatsapp', label: 'Whatsapp' },
-  { value: 'Presencial', label: 'Presencial' }
-];
-
 export const actualizarDatosVenta = async (req, res) => {
   const { id } = req.params;
   const { venta_nota, venta_origen } = req.body;
@@ -950,3 +901,42 @@ export const obtenerMetricasVentas = async (req, res) => {
     res.status(500).json({ message: 'Error interno al obtener métricas.' });
   }
 };
+
+// Funciones auxiliares para obtener datos del cliente cuando sea necesario
+async function obtenerNombreCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_nombre FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_nombre : '';
+}
+
+async function obtenerApellidoCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_apellido FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_apellido : '';
+}
+
+async function obtenerEmailCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT cliente_email FROM clientes WHERE cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].cliente_email : '';
+}
+
+async function obtenerTelefonoCliente(conn, clienteId) {
+  const [resultado] = await conn.query(
+    `SELECT p.persona_telefono FROM personas p 
+     JOIN clientes c ON p.persona_id = c.persona_id 
+     WHERE c.cliente_id = ?`,
+    [clienteId]
+  );
+  return resultado.length > 0 ? resultado[0].persona_telefono : null;
+}

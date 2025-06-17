@@ -402,7 +402,7 @@ export const obtenerProductos = async (req, res) => {
         c.categoria_nombre AS categoria,
         COALESCE(SUM(s.cantidad), 0) AS stock_total,
         ip.imagen_url,
-        p.producto_visible,
+        p.producto_visible AS visible,
         p.producto_estado
       FROM productos p
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
@@ -1045,6 +1045,12 @@ export const actualizarProducto = async (req, res) => {
 
           // Insertar valores asociados a la variante
           if (variante.valores && Array.isArray(variante.valores)) {
+            // AGREGAR ESTA LÍNEA: Eliminar los valores anteriores para esta variante
+            await conn.query(
+              `DELETE FROM valores_variantes WHERE variante_id = ?`,
+              [varianteResult.insertId]
+            );
+
             for (const valor of variante.valores) {
               const atributo_nombre = valor.atributo_nombre;
 
