@@ -168,7 +168,7 @@ CREATE TABLE categorias (
 
 CREATE TABLE productos (
   producto_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  categoria_id INTEGER UNSIGNED NOT NULL,
+  categoria_id INTEGER UNSIGNED NULL,
   producto_nombre VARCHAR(255) NOT NULL,
   producto_descripcion TEXT NULL,
   producto_precio_venta DECIMAL(10, 2) NULL,
@@ -182,7 +182,7 @@ CREATE TABLE productos (
   PRIMARY KEY(producto_id),
   FOREIGN KEY(categoria_id)
     REFERENCES categorias(categoria_id)
-    ON DELETE CASCADE
+    ON DELETE SET NULL
     ON UPDATE CASCADE
 );
 
@@ -321,7 +321,7 @@ CREATE TABLE cupones (
 
 CREATE TABLE promociones (
   promocion_id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT,
-  categoria_id INTEGER UNSIGNED NOT NULL,
+  categoria_id INTEGER UNSIGNED NULL,
   promocion_nombre VARCHAR(100) NOT NULL,
   promocion_descripcion TEXT NULL,
   promocion_descuento_porcentaje DECIMAL(5, 2) NOT NULL COMMENT 'Ej: 10.00 para 10%',
@@ -331,7 +331,7 @@ CREATE TABLE promociones (
   PRIMARY KEY(promocion_id),
   FOREIGN KEY(categoria_id)
     REFERENCES categorias(categoria_id)
-    ON DELETE CASCADE
+    ON DELETE SET NULL
     ON UPDATE CASCADE
 );
 

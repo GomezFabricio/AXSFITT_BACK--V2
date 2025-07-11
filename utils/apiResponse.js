@@ -49,8 +49,32 @@ export class ApiResponse {
   static manejarErrorDB(error, res, operacion) {
     console.error(`Error al ${operacion}:`, error);
     
-    // Manejar error personalizado de email duplicado
+    // Manejar errores personalizados
     if (error.code === 'EMAIL_DUPLICADO') {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    
+    if (error.code === 'CATEGORIA_NO_ENCONTRADA') {
+      return ApiResponse.error(res, error.message, 404);
+    }
+    
+    if (error.code === 'CATEGORIA_TIENE_HIJOS') {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    
+    if (error.code === 'CATEGORIA_TIENE_PRODUCTOS') {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    
+    if (error.code === 'CATEGORIA_DUPLICADA') {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    
+    if (error.code === 'CATEGORIA_PADRE_INVALIDA') {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    
+    if (error.code === 'CATEGORIA_ORDEN_INVALIDO') {
       return ApiResponse.error(res, error.message, 400);
     }
     
@@ -61,6 +85,9 @@ export class ApiResponse {
       }
       if (error.sqlMessage.includes('cliente_email')) {
         return ApiResponse.error(res, 'Ya existe un cliente con ese email.', 400);
+      }
+      if (error.sqlMessage.includes('categoria_descripcion')) {
+        return ApiResponse.error(res, 'Ya existe una categoría con ese nombre.', 400);
       }
       return ApiResponse.error(res, 'Entrada duplicada.', 400);
     }
