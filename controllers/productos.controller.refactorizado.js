@@ -124,26 +124,18 @@ class ProductoController {
    */
   static async crearProducto(req, res) {
     try {
-      console.log('🔄 Creando producto - Body:', req.body);
-      
       const datosProducto = req.body;
       
       // Validaciones básicas
       if (!Validador.esTextoValido(datosProducto.producto_nombre)) {
-        console.log('❌ Nombre del producto inválido:', datosProducto.producto_nombre);
         return ApiResponse.error(res, 'El nombre del producto es obligatorio', 400);
       }
       
       if (!Validador.esNumeroValido(datosProducto.categoria_id)) {
-        console.log('❌ Categoría inválida:', datosProducto.categoria_id);
         return ApiResponse.error(res, 'La categoría es obligatoria', 400);
       }
 
-      console.log('✅ Validaciones básicas pasadas, creando producto...');
-      
       const nuevoProducto = await ProductoService.crearProducto(datosProducto);
-      
-      console.log('✅ Producto creado exitosamente:', nuevoProducto);
       
       return ApiResponse.success(res, nuevoProducto, 'Producto creado exitosamente', 201);
     } catch (error) {
@@ -174,13 +166,6 @@ class ProductoController {
     try {
       const { producto_id } = req.params;
       const datosProducto = req.body;
-      
-      console.log('Datos recibidos en actualizarProducto:', {
-        producto_id,
-        producto_stock: datosProducto.producto_stock,
-        tipo_producto_stock: typeof datosProducto.producto_stock,
-        datosCompletos: datosProducto
-      });
       
       if (!Validador.esNumeroValido(producto_id)) {
         return ApiResponse.error(res, 'ID de producto inválido', 400);
@@ -300,38 +285,21 @@ class ProductoController {
 
   static async guardarImagenTemporal(req, res) {
     try {
-      console.log('🔄 Guardando imagen temporal - Body:', req.body);
-      console.log('🔄 Archivo recibido:', req.file ? {
-        filename: req.file.filename,
-        originalname: req.file.originalname,
-        mimetype: req.file.mimetype,
-        size: req.file.size
-      } : 'No hay archivo');
-      
       const { usuario_id, imagen_orden } = req.body;
       const archivo = req.file;
 
       if (!archivo) {
-        console.log('❌ No se recibió archivo');
         return ApiResponse.error(res, 'No se recibió ningún archivo', 400);
       }
 
       if (!usuario_id) {
-        console.log('❌ usuario_id faltante:', usuario_id);
         return ApiResponse.error(res, 'ID de usuario es requerido', 400);
       }
-
-      console.log('✅ Validaciones pasadas, procesando archivo');
-      console.log('📋 Parámetros:', { usuario_id, imagen_orden: imagen_orden || 0 });
       
       // Crear la URL de la imagen
       const imagen_url = `/uploads/${archivo.filename}`;
       
-      console.log('📸 URL de imagen generada:', imagen_url);
-      
       const resultado = await ProductoService.guardarImagenTemporal(usuario_id, imagen_url, imagen_orden || 0);
-      
-      console.log('✅ Imagen temporal guardada exitosamente - ID:', resultado);
       
       return ApiResponse.success(res, { 
         imagen_id: resultado,
@@ -346,30 +314,22 @@ class ProductoController {
 
   static async eliminarImagenTemporal(req, res) {
     try {
-      console.log('🔄 Eliminando imagen temporal - Body:', req.body);
-      
       const { usuario_id, imagen_id } = req.body;
       
       if (!usuario_id || !imagen_id) {
-        console.log('❌ usuario_id o imagen_id faltantes:', { usuario_id, imagen_id });
         return ApiResponse.error(res, 'El usuario y la imagen son obligatorios', 400);
       }
 
       if (!Validador.esNumeroValido(imagen_id)) {
-        console.log('❌ imagen_id inválido:', imagen_id);
         return ApiResponse.error(res, 'ID de imagen inválido', 400);
       }
-
-      console.log('✅ Validaciones pasadas, eliminando imagen...');
       
       const resultado = await ProductoService.eliminarImagenTemporal(usuario_id, imagen_id);
       
       if (!resultado) {
-        console.log('❌ No se pudo eliminar la imagen');
         return ApiResponse.error(res, 'No se pudo eliminar la imagen', 404);
       }
       
-      console.log('✅ Imagen eliminada exitosamente');
       return ApiResponse.success(res, { imagen_id }, 'Imagen eliminada exitosamente');
     } catch (error) {
       console.error('❌ Error al eliminar imagen temporal:', error);
@@ -430,39 +390,26 @@ class ProductoController {
 
   static async cambiarEstadoVariante(req, res) {
     try {
-      console.log('🔄 Cambiar estado de variante - Request body:', req.body);
-      
       const { variante_id, estado } = req.body;
       
-      console.log('🔍 Valores recibidos:', { variante_id, estado });
-      
       if (!Validador.esNumeroValido(variante_id)) {
-        console.log('❌ ID de variante inválido:', variante_id);
         return ApiResponse.error(res, 'ID de variante inválido', 400);
       }
 
       if (estado === undefined || estado === null) {
-        console.log('❌ Estado inválido:', estado);
         return ApiResponse.error(res, 'Estado es requerido', 400);
       }
 
       if (!['activo', 'inactivo'].includes(estado)) {
-        console.log('❌ Estado no válido:', estado);
         return ApiResponse.error(res, 'Estado debe ser "activo" o "inactivo"', 400);
       }
-
-      console.log('✅ Validaciones pasadas, ejecutando cambio de estado');
       
       const resultado = await ProductoService.cambiarEstadoVariante(variante_id, estado);
       
-      console.log('🎯 Resultado del servicio:', resultado);
-      
       if (!resultado) {
-        console.log('❌ No se pudo actualizar la variante');
         return ApiResponse.error(res, 'No se pudo actualizar la variante', 400);
       }
       
-      console.log('✅ Estado de variante actualizado exitosamente');
       return ApiResponse.success(res, { variante_id, estado }, 'Estado de variante actualizado exitosamente');
     } catch (error) {
       console.error('❌ Error al cambiar estado de variante:', error);
@@ -512,27 +459,14 @@ class ProductoController {
     try {
       const { producto_id } = req.params;
 
-      console.log('🔄 Petición subirImagenProducto recibida:', {
-        producto_id,
-        file: req.file ? {
-          filename: req.file.filename,
-          originalname: req.file.originalname,
-          size: req.file.size,
-          mimetype: req.file.mimetype
-        } : null
-      });
-
       if (!producto_id || !req.file) {
-        console.log('❌ Faltan parámetros requeridos');
         return ApiResponse.error(res, 'El producto y la imagen son obligatorios.', 400);
       }
 
       const imagen_url = `/uploads/${req.file.filename}`;
-      console.log('📤 Llamando al servicio con:', { producto_id, imagen_url });
       
       const resultado = await ProductoService.subirImagenProducto(producto_id, imagen_url);
       
-      console.log('✅ Resultado del servicio:', resultado);
       return ApiResponse.success(res, resultado, 'Imagen subida exitosamente.');
     } catch (error) {
       console.error('❌ Error en subirImagenProducto:', error);
@@ -544,20 +478,15 @@ class ProductoController {
     try {
       const { producto_id, imagen_id, nuevo_orden, nueva_posicion } = req.body;
 
-      console.log('🔄 Petición moverImagenProducto recibida:', req.body);
-
       // Aceptar tanto nuevo_orden (del original) como nueva_posicion (refactorizado)
       const orden = nuevo_orden !== undefined ? nuevo_orden : nueva_posicion;
 
       if (!producto_id || !imagen_id || orden === undefined) {
-        console.log('❌ Faltan parámetros requeridos');
         return ApiResponse.error(res, 'El producto, imagen y nueva posición son obligatorios.', 400);
       }
 
-      console.log('📤 Llamando al servicio con:', { producto_id, imagen_id, orden });
       await ProductoService.moverImagenProducto(producto_id, imagen_id, orden);
 
-      console.log('✅ Imagen movida exitosamente');
       return ApiResponse.success(res, {}, 'Imagen movida exitosamente.');
     } catch (error) {
       console.error('❌ Error en moverImagenProducto:', error);

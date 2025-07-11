@@ -255,8 +255,6 @@ class ProductoService {
    * @returns {Object} Producto creado
    */
   static async crearProducto(datos) {
-    console.log('🔄 ProductoService.crearProducto - Datos recibidos:', datos);
-    
     const {
       usuario_id,
       categoria_id,
@@ -271,8 +269,6 @@ class ProductoService {
       atributos,
       variantes
     } = datos;
-
-    console.log('🔄 usuario_id extraído:', usuario_id);
 
     // Validar duplicados
     const nombreDuplicado = await this.verificarNombreDuplicado(producto_nombre, categoria_id);
@@ -329,7 +325,6 @@ class ProductoService {
       ]);
 
       const producto_id = productoResult.insertId;
-      console.log('✅ Producto insertado con ID:', producto_id);
 
       // Insertar stock inicial si existe
       if (producto_stock) {
@@ -337,20 +332,11 @@ class ProductoService {
           'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)',
           [producto_id, producto_stock]
         );
-        console.log('✅ Stock inicial insertado:', producto_stock);
       }
 
       // Procesar imágenes temporales
       if (imagenes && imagenes.length > 0) {
-        console.log('🔄 Procesando imágenes temporales:', imagenes.length);
-        
         const imagenQueries = imagenes.map((imagen, index) => {
-          console.log('🔄 Procesando imagen:', { 
-            id: imagen.id, 
-            index, 
-            usuario_id: datos.usuario_id || usuario_id,
-            producto_id 
-          });
           return conn.query(
             `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden)
             SELECT ?, imagen_url, ?
@@ -361,18 +347,13 @@ class ProductoService {
         });
         
         await Promise.all(imagenQueries);
-        console.log('✅ Imágenes procesadas exitosamente');
-
         // Eliminar las imágenes de la tabla temporal
         await conn.query(`DELETE FROM imagenes_temporales WHERE usuario_id = ?`, [datos.usuario_id || usuario_id]);
-        console.log('✅ Imágenes temporales eliminadas para usuario_id:', datos.usuario_id || usuario_id);
       }
 
       // Procesar atributos
       const atributoIds = {};
       if (atributos && atributos.length > 0) {
-        console.log('🔄 Procesando atributos:', atributos.length);
-        
         for (const atributo of atributos) {
           const [atributoResult] = await conn.query(
             `INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)`,
@@ -380,14 +361,11 @@ class ProductoService {
           );
           const atributo_id = atributoResult.insertId;
           atributoIds[atributo.atributo_nombre] = atributo_id;
-          console.log('✅ Atributo insertado:', { nombre: atributo.atributo_nombre, id: atributo_id });
         }
       }
 
       // Procesar variantes
       if (variantes && variantes.length > 0) {
-        console.log('🔄 Procesando variantes:', variantes.length);
-        
         for (const variante of variantes) {
           let imagen_id = null;
 
@@ -400,9 +378,6 @@ class ProductoService {
 
             if (imagenResult.length > 0) {
               imagen_id = imagenResult[0].imagen_id;
-              console.log('✅ Imagen encontrada para variante:', { url: variante.imagen_url, id: imagen_id });
-            } else {
-              console.log('⚠️ No se encontró imagen_id para la URL:', variante.imagen_url);
             }
           }
 
@@ -431,7 +406,6 @@ class ProductoService {
             ]
           );
           const variante_id = varianteResult.insertId;
-          console.log('✅ Variante insertada:', { id: variante_id, estado: variante_estado });
 
           // Insertar stock de la variante (si tiene stock inicial)
           if (variante.stock) {
@@ -439,13 +413,10 @@ class ProductoService {
               `INSERT INTO stock (variante_id, cantidad) VALUES (?, ?)`,
               [variante_id, variante.stock]
             );
-            console.log('✅ Stock de variante insertado:', variante.stock);
           }
 
           // Insertar valores asociados a la variante
           if (variante.valores && variante.valores.length > 0) {
-            console.log('🔄 Procesando valores de variante:', variante.valores);
-            
             for (const valor of variante.valores) {
               // Buscar el atributo correspondiente
               const atributo_nombre = Object.keys(atributoIds).find(nombre =>
@@ -462,7 +433,6 @@ class ProductoService {
                 `INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)`,
                 [variante_id, atributo_id, valor]
               );
-              console.log('✅ Valor de variante insertado:', { valor, atributo_id });
             }
           }
         }
@@ -568,12 +538,6 @@ class ProductoService {
     if (!producto_nombre || !categoria_id) {
       throw new Error('El nombre del producto y la categoría son obligatorios.');
     }
-
-    console.log('ProductoService.actualizarProductoCompleto - Datos recibidos:', {
-      producto_stock,
-      tipo_producto_stock: typeof producto_stock,
-      variantes: variantes ? variantes.length : 'undefined'
-    });
 
     const conn = await pool.getConnection();
     try {
@@ -691,26 +655,18 @@ class ProductoService {
           stockCantidad = producto_stock; // Usar el valor proporcionado
         }
 
-        console.log('Actualizando stock del producto principal:', {
-          producto_stock,
-          stockCantidad,
-          stockExistente: stockExistenteProducto.length > 0
-        });
-
         if (stockExistenteProducto.length > 0) {
           // Si existe, actualizar el stock
           await conn.query(
             `UPDATE stock SET cantidad = ? WHERE producto_id = ? AND variante_id IS NULL`,
             [stockCantidad, id]
           );
-          console.log('Stock actualizado en registro existente');
         } else {
           // Si no existe, insertar un nuevo registro de stock
           await conn.query(
             `INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)`,
             [id, stockCantidad]
           );
-          console.log('Nuevo registro de stock insertado');
         }
       }
 
@@ -911,7 +867,6 @@ class ProductoService {
                 const atributo_nombre = valor.atributo_nombre;
 
                 if (!atributoIds[atributo_nombre]) {
-                  console.warn(`No se encontró el atributo '${atributo_nombre}' para el producto ${id}.`);
                   continue;
                 }
 
@@ -924,9 +879,7 @@ class ProductoService {
                     [varianteResult.insertId, atributo_id, valor.valor_nombre]
                   );
                 } catch (innerError) {
-                  if (innerError.code === 'ER_DUP_ENTRY') {
-                    console.warn(`Intento de insertar valor duplicado para variante_id ${varianteResult.insertId} y atributo_id ${atributo_id}.`);
-                  } else {
+                  if (innerError.code !== 'ER_DUP_ENTRY') {
                     throw innerError; // Re-lanza el error si no es una entrada duplicada
                   }
                 }
@@ -952,14 +905,11 @@ class ProductoService {
    * @returns {boolean} true si se eliminó, false si no se encontró
    */
   static async eliminarProducto(id) {
-    console.log('🔄 ProductoService.eliminarProducto - ID:', id);
-    
     const [result] = await pool.query(
       'UPDATE productos SET producto_estado = "inactivo" WHERE producto_id = ? AND producto_estado != "inactivo"',
       [id]
     );
 
-    console.log('✅ Producto eliminado (cambiado a inactivo) - Filas afectadas:', result.affectedRows);
     return result.affectedRows > 0;
   }
 
@@ -994,15 +944,12 @@ class ProductoService {
 
   // Métodos para manejo de imágenes temporales
   static async guardarImagenTemporal(usuarioId, imagenUrl, imagenOrden = 0) {
-    console.log('🔄 ProductoService.guardarImagenTemporal - Parámetros:', { usuarioId, imagenUrl, imagenOrden });
-    
     try {
       const [result] = await pool.query(
         'INSERT INTO imagenes_temporales (usuario_id, imagen_url, imagen_orden) VALUES (?, ?, ?)',
         [usuarioId, imagenUrl, imagenOrden]
       );
 
-      console.log('✅ Imagen temporal guardada - ID:', result.insertId);
       return result.insertId;
     } catch (error) {
       console.error('❌ Error en ProductoService.guardarImagenTemporal:', error);
@@ -1020,8 +967,6 @@ class ProductoService {
   }
 
   static async eliminarImagenTemporal(usuarioId, imagenId) {
-    console.log('🔄 ProductoService.eliminarImagenTemporal - Parámetros:', { usuarioId, imagenId });
-    
     try {
       // Primero obtener la URL de la imagen para poder eliminar el archivo
       const [imagen] = await pool.query(
@@ -1030,12 +975,10 @@ class ProductoService {
       );
 
       if (imagen.length === 0) {
-        console.log('❌ Imagen no encontrada en la base de datos');
         return false;
       }
 
       const imagenUrl = imagen[0].imagen_url;
-      console.log('📸 URL de imagen a eliminar:', imagenUrl);
 
       // Eliminar la imagen de la base de datos
       const [result] = await pool.query(
@@ -1045,16 +988,11 @@ class ProductoService {
 
       // Eliminar la imagen del sistema de archivos
       const filePath = path.join('uploads', path.basename(imagenUrl));
-      console.log('🗂️ Eliminando archivo físico:', filePath);
       
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        console.log('✅ Archivo físico eliminado');
-      } else {
-        console.log('⚠️ Archivo físico no encontrado');
       }
 
-      console.log('✅ Imagen eliminada exitosamente');
       return result.affectedRows > 0;
     } catch (error) {
       console.error('❌ Error en ProductoService.eliminarImagenTemporal:', error);
@@ -1094,19 +1032,13 @@ class ProductoService {
   }
 
   static async cambiarEstadoVariante(varianteId, estado) {
-    console.log('🔄 ProductoService.cambiarEstadoVariante - Parámetros:', { varianteId, estado });
-    
     try {
       const [result] = await pool.query(
         'UPDATE variantes SET variante_estado = ? WHERE variante_id = ?',
         [estado, varianteId]
       );
 
-      console.log('📊 Resultado de la consulta:', result);
-      console.log('🔢 Filas afectadas:', result.affectedRows);
-
       const success = result.affectedRows > 0;
-      console.log('✅ Cambio de estado exitoso:', success);
       
       return success;
     } catch (error) {
@@ -1210,8 +1142,6 @@ class ProductoService {
    * @returns {Object} Datos de la imagen subida
    */
   static async subirImagenProducto(productoId, imagenUrl) {
-    console.log('🔄 Subiendo imagen al producto:', productoId, 'URL:', imagenUrl);
-    
     try {
       // Obtener el próximo orden para la imagen
       const [maxOrden] = await pool.query(
@@ -1220,15 +1150,12 @@ class ProductoService {
       );
       
       const nextOrden = maxOrden[0].next_orden;
-      console.log('📊 Próximo orden:', nextOrden);
       
       // Insertar la imagen
       const [result] = await pool.query(
         `INSERT INTO imagenes_productos (producto_id, imagen_url, imagen_orden) VALUES (?, ?, ?)`,
         [productoId, imagenUrl, nextOrden]
       );
-      
-      console.log('✅ Imagen insertada con ID:', result.insertId);
       
       return {
         imagen_id: result.insertId,
@@ -1283,8 +1210,6 @@ class ProductoService {
    * @returns {boolean} True si se movió correctamente
    */
   static async moverImagenProducto(productoId, imagenId, nuevoOrden) {
-    console.log('🔄 Moviendo imagen:', { productoId, imagenId, nuevoOrden });
-    
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -1301,19 +1226,16 @@ class ProductoService {
       }
 
       const ordenActual = imagenActual[0].imagen_orden;
-      console.log('📊 Orden actual:', ordenActual, 'Nuevo orden:', nuevoOrden);
 
       // Si el nuevo orden es igual al actual, no hacer nada
       if (ordenActual === nuevoOrden) {
         await conn.rollback();
-        console.log('ℹ️ El orden ya está actualizado');
         return true;
       }
 
       // Ajustar los órdenes de las demás imágenes
       if (ordenActual < nuevoOrden) {
         // Mover hacia abajo: reducir el orden de las imágenes entre el rango
-        console.log('⬇️ Moviendo hacia abajo');
         await conn.query(
           `UPDATE imagenes_productos 
            SET imagen_orden = imagen_orden - 1 
@@ -1322,7 +1244,6 @@ class ProductoService {
         );
       } else {
         // Mover hacia arriba: incrementar el orden de las imágenes entre el rango
-        console.log('⬆️ Moviendo hacia arriba');
         await conn.query(
           `UPDATE imagenes_productos 
            SET imagen_orden = imagen_orden + 1 
@@ -1340,7 +1261,6 @@ class ProductoService {
       );
 
       await conn.commit();
-      console.log('✅ Imagen movida correctamente');
       return true;
     } catch (error) {
       await conn.rollback();
