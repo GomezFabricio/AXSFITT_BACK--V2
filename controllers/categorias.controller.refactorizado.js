@@ -47,6 +47,12 @@ export class CategoriaController {
       });
     } catch (error) {
       console.error('Error al crear categoría:', error);
+      
+      // Manejar error de nombre duplicado
+      if (error.message === 'Ya existe una categoría con ese nombre en el mismo nivel') {
+        return res.status(400).json({ message: error.message });
+      }
+      
       res.status(500).json({ message: 'Error interno al crear la categoría.' });
     }
   }
@@ -80,6 +86,12 @@ export class CategoriaController {
       });
     } catch (error) {
       console.error('Error al crear/agregar categoría:', error);
+      
+      // Manejar error de nombre duplicado
+      if (error.message === 'Ya existe una categoría con ese nombre en el mismo nivel') {
+        return res.status(400).json({ message: error.message });
+      }
+      
       res.status(500).json({ message: 'Error interno al crear/agregar la categoría.' });
     }
   }

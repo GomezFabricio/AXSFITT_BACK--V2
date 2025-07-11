@@ -15,8 +15,7 @@ export class CategoriaService {
         categoria_nombre, 
         categoria_descripcion, 
         categoria_padre_id, 
-        categoria_orden, 
-        categoria_estado 
+        categoria_orden 
       FROM categorias 
       ORDER BY (categoria_padre_id IS NULL) DESC, categoria_padre_id ASC, categoria_orden ASC
     `);
@@ -46,8 +45,8 @@ export class CategoriaService {
     const nuevoOrden = ordenRows[0].nuevo_orden;
 
     const [result] = await pool.query(
-      'INSERT INTO categorias (categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_estado, categoria_orden) VALUES (?, ?, ?, ?, ?)',
-      [categoria_nombre, categoria_descripcion || null, categoria_padre_id || null, 'activa', nuevoOrden]
+      'INSERT INTO categorias (categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_orden) VALUES (?, ?, ?, ?)',
+      [categoria_nombre, categoria_descripcion || null, categoria_padre_id || null, nuevoOrden]
     );
 
     return { 
@@ -91,8 +90,8 @@ export class CategoriaService {
     
     // Insertar la nueva categoría
     const [result] = await pool.query(
-      'INSERT INTO categorias (categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_estado, categoria_orden) VALUES (?, ?, ?, ?, ?)',
-      [categoria_nombre, categoria_descripcion || null, categoria_padre_id || null, 'activa', nuevoOrden]
+      'INSERT INTO categorias (categoria_nombre, categoria_descripcion, categoria_padre_id, categoria_orden) VALUES (?, ?, ?, ?)',
+      [categoria_nombre, categoria_descripcion || null, categoria_padre_id || null, nuevoOrden]
     );
     
     return {

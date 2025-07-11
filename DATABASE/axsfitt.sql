@@ -53,7 +53,6 @@ CREATE TABLE `categorias` (
   `categoria_padre_id` int(10) UNSIGNED DEFAULT NULL,
   `categoria_nombre` varchar(100) NOT NULL,
   `categoria_descripcion` text DEFAULT NULL,
-  `categoria_estado` enum('activa','inactiva') DEFAULT 'activa',
   `categoria_orden` int(10) UNSIGNED NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -61,18 +60,18 @@ CREATE TABLE `categorias` (
 -- Volcado de datos para la tabla `categorias`
 --
 
-INSERT INTO `categorias` (`categoria_id`, `categoria_padre_id`, `categoria_nombre`, `categoria_descripcion`, `categoria_estado`, `categoria_orden`) VALUES
-(1, NULL, 'Proteinas', NULL, 'activa', 1),
-(2, NULL, 'Creatinas', NULL, 'activa', 2),
-(3, NULL, 'Citratos de Magnesio', NULL, 'activa', 3),
-(4, 3, 'Star', NULL, 'activa', 1),
-(5, 3, 'One Fit', NULL, 'activa', 2),
-(6, 2, 'Star', NULL, 'activa', 1),
-(7, 2, 'One Fit', NULL, 'activa', 2),
-(8, 1, 'Star', NULL, 'activa', 1),
-(9, 1, 'One Fit', NULL, 'activa', 2),
-(10, 1, 'Gold Nutrition', NULL, 'activa', 3),
-(11, NULL, 'Pre-Entrenos', NULL, 'activa', 4);
+INSERT INTO `categorias` (`categoria_id`, `categoria_padre_id`, `categoria_nombre`, `categoria_descripcion`, `categoria_orden`) VALUES
+(1, NULL, 'Proteinas', NULL, 1),
+(2, NULL, 'Creatinas', NULL, 2),
+(3, NULL, 'Citratos de Magnesio', NULL, 3),
+(4, 3, 'Star', NULL, 1),
+(5, 3, 'One Fit', NULL, 2),
+(6, 2, 'Star', NULL, 1),
+(7, 2, 'One Fit', NULL, 2),
+(8, 1, 'Star', NULL, 1),
+(9, 1, 'One Fit', NULL, 2),
+(10, 1, 'Gold Nutrition', NULL, 3),
+(11, NULL, 'Pre-Entrenos', NULL, 4);
 
 -- --------------------------------------------------------
 

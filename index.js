@@ -14,6 +14,7 @@ import perfilesRoutes from './routes/perfiles.routes.js';
 import CategoriasRoutes from './routes/categorias.routes.js';
 import CategoriasRoutesRefactorizado from './routes/categorias.routes.refactorizado.js';
 import ProductosRoutes from './routes/productos.routes.js';
+import ProductosRoutesRefactorizado from './routes/productos.routes.refactorizado.js';
 import StockRoutes from './routes/stock.routes.js';
 import ClientesRoutes from './routes/clientes.routes.js';
 import ClientesRoutesRefactorizado from './routes/clientes.routes.refactorizado.js';
@@ -38,6 +39,7 @@ app.use('/api/modulos', modulosRoutes);
 app.use('/api/perfiles', perfilesRoutes);
 app.use('/api/categorias-v2', CategoriasRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/productos', ProductosRoutes);
+app.use('/api/productos-v2', ProductosRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/stock', StockRoutes);
 app.use('/api/clientes-v2', ClientesRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/ventas', VentasRoutes);

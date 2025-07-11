@@ -157,7 +157,6 @@ CREATE TABLE categorias (
   categoria_padre_id INTEGER UNSIGNED NULL,
   categoria_nombre VARCHAR(100) NOT NULL,
   categoria_descripcion TEXT NULL,
-  categoria_estado ENUM('activa', 'inactiva') DEFAULT 'activa',
   categoria_orden INT UNSIGNED NOT NULL DEFAULT 0,
   PRIMARY KEY (categoria_id),
   FOREIGN KEY (categoria_padre_id)

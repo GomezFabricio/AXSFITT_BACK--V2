@@ -110,4 +110,82 @@ export class Validador {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(String(email).toLowerCase());
   }
+
+  /**
+   * Valida si un valor es un número válido
+   * @param {*} valor - Valor a validar
+   * @returns {boolean} True si es un número válido
+   */
+  static esNumeroValido(valor) {
+    return valor !== null && valor !== undefined && !isNaN(valor) && valor > 0;
+  }
+
+  /**
+   * Valida si un texto es válido (no vacío)
+   * @param {string} texto - Texto a validar
+   * @returns {boolean} True si el texto es válido
+   */
+  static esTextoValido(texto) {
+    return texto && typeof texto === 'string' && texto.trim().length > 0;
+  }
+
+  /**
+   * Valida si un precio es válido
+   * @param {*} precio - Precio a validar
+   * @returns {boolean} True si el precio es válido
+   */
+  static esPrecioValido(precio) {
+    return precio !== null && precio !== undefined && !isNaN(precio) && precio >= 0;
+  }
+
+  /**
+   * Valida los datos básicos de un producto
+   * @param {Object} datos - Datos del producto a validar
+   * @returns {Object} Objeto con propiedades valido y errores/mensaje
+   */
+  static validarProducto(datos) {
+    const { 
+      producto_nombre, 
+      categoria_id, 
+      producto_precio_venta,
+      producto_precio_costo,
+      producto_precio_oferta,
+      producto_sku
+    } = datos;
+    
+    const errores = {};
+    
+    if (!this.esTextoValido(producto_nombre)) {
+      errores.producto_nombre = 'El nombre del producto es obligatorio';
+    } else if (producto_nombre.trim().length < 2) {
+      errores.producto_nombre = 'El nombre debe tener al menos 2 caracteres';
+    } else if (producto_nombre.trim().length > 255) {
+      errores.producto_nombre = 'El nombre no puede tener más de 255 caracteres';
+    }
+    
+    if (!this.esNumeroValido(categoria_id)) {
+      errores.categoria_id = 'La categoría es obligatoria';
+    }
+    
+    if (producto_precio_venta && !this.esPrecioValido(producto_precio_venta)) {
+      errores.producto_precio_venta = 'El precio de venta debe ser un número válido';
+    }
+    
+    if (producto_precio_costo && !this.esPrecioValido(producto_precio_costo)) {
+      errores.producto_precio_costo = 'El precio de costo debe ser un número válido';
+    }
+    
+    if (producto_precio_oferta && !this.esPrecioValido(producto_precio_oferta)) {
+      errores.producto_precio_oferta = 'El precio de oferta debe ser un número válido';
+    }
+    
+    if (producto_sku && (typeof producto_sku !== 'string' || producto_sku.trim().length > 100)) {
+      errores.producto_sku = 'El SKU debe ser una cadena válida de máximo 100 caracteres';
+    }
+    
+    return {
+      valido: Object.keys(errores).length === 0,
+      errores: Object.keys(errores).length > 0 ? errores : null
+    };
+  }
 }
