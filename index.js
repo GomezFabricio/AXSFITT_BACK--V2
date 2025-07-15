@@ -8,15 +8,13 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { PORT, SECRET_KEY } from './config.js'; // Importa SECRET_KEY para mostrarla
 import loginRoutes from './routes/login.routes.js';
-import usuariosRoutes from './routes/usuarios.routes.js';
+import usuariosRoutesRefactorizado from './routes/usuarios.routes.refactorizado.js';
 import modulosRoutes from './routes/modulos.routes.js';
 import perfilesRoutes from './routes/perfiles.routes.js';
-import CategoriasRoutes from './routes/categorias.routes.js';
 import CategoriasRoutesRefactorizado from './routes/categorias.routes.refactorizado.js';
 import ProductosRoutes from './routes/productos.routes.js';
 import ProductosRoutesRefactorizado from './routes/productos.routes.refactorizado.js';
 import StockRoutes from './routes/stock.routes.js';
-import ClientesRoutes from './routes/clientes.routes.js';
 import ClientesRoutesRefactorizado from './routes/clientes.routes.refactorizado.js';
 import VentasRoutes from './routes/ventas.routes.js';
 
@@ -34,7 +32,7 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/login', loginRoutes);
-app.use('/api/usuarios', usuariosRoutes);
+app.use('/api/usuarios-v2', usuariosRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/modulos', modulosRoutes);
 app.use('/api/perfiles', perfilesRoutes);
 app.use('/api/categorias-v2', CategoriasRoutesRefactorizado); // Nueva versión refactorizada
