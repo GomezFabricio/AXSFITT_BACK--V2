@@ -17,6 +17,7 @@ import ProductosRoutesRefactorizado from './routes/productos.routes.refactorizad
 import StockRoutes from './routes/stock.routes.js';
 import ClientesRoutesRefactorizado from './routes/clientes.routes.refactorizado.js';
 import VentasRoutes from './routes/ventas.routes.js';
+import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -41,6 +42,7 @@ app.use('/api/productos-v2', ProductosRoutesRefactorizado); // Nueva versión re
 app.use('/api/stock', StockRoutes);
 app.use('/api/clientes-v2', ClientesRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/ventas', VentasRoutes);
+app.use('/api/ventas-v2', VentasRoutesRefactorizado); // Nueva versión refactorizada
 
 app.get('/', (req, res) => {
     res.send('Servidor funcionando correctamente');
