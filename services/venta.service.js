@@ -344,13 +344,17 @@ export class VentaService {
             'precio_unitario', vd.vd_precio_unitario,
             'subtotal', vd.vd_subtotal,
             'producto_nombre', vd.producto_nombre,
-            'variante_descripcion', vd.variante_descripcion
+            'variante_descripcion', vd.variante_descripcion,
+            'producto_sku', p.producto_sku,
+            'variante_sku', var.variante_sku
           )
         ) as productos
       FROM ventas v
       LEFT JOIN clientes c ON v.cliente_id = c.cliente_id
       LEFT JOIN envios_invitados ei ON v.venta_id = ei.venta_id
       LEFT JOIN ventas_detalle vd ON v.venta_id = vd.venta_id
+      LEFT JOIN productos p ON vd.producto_id = p.producto_id
+      LEFT JOIN variantes var ON vd.variante_id = var.variante_id
       WHERE v.venta_id = ?
       GROUP BY v.venta_id
     `
