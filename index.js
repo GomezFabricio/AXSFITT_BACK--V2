@@ -15,6 +15,7 @@ import CategoriasRoutesRefactorizado from './routes/categorias.routes.refactoriz
 import ProductosRoutes from './routes/productos.routes.js';
 import ProductosRoutesRefactorizado from './routes/productos.routes.refactorizado.js';
 import StockRoutes from './routes/stock.routes.js';
+import StockRoutesRefactorizado from './routes/stock.routes.refactorizado.js';
 import ClientesRoutesRefactorizado from './routes/clientes.routes.refactorizado.js';
 import VentasRoutes from './routes/ventas.routes.js';
 import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
@@ -40,6 +41,7 @@ app.use('/api/categorias-v2', CategoriasRoutesRefactorizado); // Nueva versión 
 app.use('/api/productos', ProductosRoutes);
 app.use('/api/productos-v2', ProductosRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/stock', StockRoutes);
+app.use('/api/stock-v2', StockRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/clientes-v2', ClientesRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/ventas', VentasRoutes);
 app.use('/api/ventas-v2', VentasRoutesRefactorizado); // Nueva versión refactorizada
