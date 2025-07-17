@@ -261,16 +261,98 @@ CREATE TABLE stock (
 );
 
 CREATE TABLE faltantes (
-  id_faltante INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  producto_id INT UNSIGNED NULL,
-  variante_id INT UNSIGNED NULL,
-  fecha_deteccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  cantidad_faltante INT UNSIGNED NOT NULL,
-  resuelto BOOLEAN DEFAULT FALSE,
-  PRIMARY KEY (id_faltante),
-  FOREIGN KEY (producto_id) REFERENCES productos(producto_id) ON DELETE SET NULL ON UPDATE CASCADE,
-  FOREIGN KEY (variante_id) REFERENCES variantes(variante_id) ON DELETE SET NULL ON UPDATE CASCADE
+  faltante_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  faltante_producto_id INT UNSIGNED NULL,
+  faltante_variante_id INT UNSIGNED NULL,
+  faltante_fecha_deteccion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  faltante_cantidad_original INT UNSIGNED NOT NULL,
+  faltante_cantidad_faltante INT UNSIGNED NOT NULL,
+  faltante_cantidad_solicitada INT UNSIGNED DEFAULT 0,
+  faltante_estado ENUM('detectado', 'registrado', 'solicitado_parcial', 'solicitado_completo', 'pedido_generado', 'en_transito', 'resuelto') DEFAULT 'detectado',
+  faltante_pedido_id INT UNSIGNED NULL,
+  faltante_resuelto BOOLEAN DEFAULT FALSE,
+  PRIMARY KEY (faltante_id),
+  FOREIGN KEY (faltante_producto_id) REFERENCES productos(producto_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (faltante_variante_id) REFERENCES variantes(variante_id) ON DELETE SET NULL ON UPDATE CASCADE
 );
+
+-- ============================================
+-- GESTIÓN DE PROVEEDORES
+-- ============================================
+
+CREATE TABLE proveedores (
+  proveedor_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  proveedor_nombre VARCHAR(255) NOT NULL,
+  proveedor_contacto VARCHAR(255) NULL,
+  proveedor_email VARCHAR(255) NULL,
+  proveedor_telefono VARCHAR(20) NULL,
+  proveedor_direccion TEXT NULL,
+  proveedor_cuit VARCHAR(20) NULL,
+  proveedor_estado ENUM('activo', 'inactivo') DEFAULT 'activo',
+  proveedor_fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (proveedor_id)
+);
+
+-- ============================================
+-- GESTIÓN DE PEDIDOS
+-- ============================================
+
+CREATE TABLE pedidos (
+  pedido_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  pedido_proveedor_id INT UNSIGNED NOT NULL,
+  pedido_usuario_id INT UNSIGNED NOT NULL,
+  pedido_fecha_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  pedido_fecha_esperada_entrega DATE NULL,
+  pedido_fecha_entrega_real DATE NULL,
+  pedido_estado ENUM('pendiente', 'enviado', 'parcial', 'completo', 'cancelado') DEFAULT 'pendiente',
+  pedido_observaciones TEXT NULL,
+  pedido_total DECIMAL(10,2) NULL,
+  PRIMARY KEY (pedido_id),
+  FOREIGN KEY (pedido_proveedor_id) REFERENCES proveedores(proveedor_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (pedido_usuario_id) REFERENCES usuarios(usuario_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+CREATE TABLE pedidos_detalle (
+  pd_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  pd_pedido_id INT UNSIGNED NOT NULL,
+  pd_producto_id INT UNSIGNED NOT NULL,
+  pd_variante_id INT UNSIGNED NULL,
+  pd_cantidad_pedida INT UNSIGNED NOT NULL,
+  pd_cantidad_recibida INT UNSIGNED DEFAULT 0,
+  pd_precio_unitario DECIMAL(10,2) NULL,
+  pd_subtotal DECIMAL(10,2) NULL,
+  PRIMARY KEY (pd_id),
+  FOREIGN KEY (pd_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (pd_producto_id) REFERENCES productos(producto_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (pd_variante_id) REFERENCES variantes(variante_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- ============================================
+-- GESTIÓN DE MOVIMIENTOS DE STOCK
+-- ============================================
+
+CREATE TABLE stock_movimientos (
+  sm_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  sm_producto_id INT UNSIGNED NOT NULL,
+  sm_variante_id INT UNSIGNED NULL,
+  sm_tipo_movimiento ENUM('entrada', 'salida', 'ajuste', 'venta', 'devolucion') NOT NULL,
+  sm_cantidad INT NOT NULL,
+  sm_motivo VARCHAR(255) NULL,
+  sm_pedido_id INT UNSIGNED NULL,
+  sm_venta_id INT UNSIGNED NULL,
+  sm_usuario_id INT UNSIGNED NOT NULL,
+  sm_fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  sm_observaciones TEXT NULL,
+  PRIMARY KEY (sm_id),
+  FOREIGN KEY (sm_producto_id) REFERENCES productos(producto_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (sm_variante_id) REFERENCES variantes(variante_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (sm_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (sm_venta_id) REFERENCES ventas(venta_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (sm_usuario_id) REFERENCES usuarios(usuario_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- Agregar la clave foránea a faltantes después de crear pedidos
+ALTER TABLE faltantes ADD FOREIGN KEY (faltante_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- ============================================
 -- GESTIÓN DE COMBOS

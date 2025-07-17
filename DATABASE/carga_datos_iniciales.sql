@@ -64,11 +64,28 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (4, 'Eliminar Producto', NULL, FALSE),                   -- 2.8
 (4, 'Ver Productos', '/productos', TRUE);                -- 2.9
 
--- Submódulo 2.11: Stock (ahora es 2.11 sin 2.10)
+-- Submódulo 2.11: Stock (expandido)
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
-(5, 'Gestionar Stock', '/productos/stock', TRUE),          -- 2.11.1
-(5, 'Establecer Stock', NULL, FALSE),                      -- 2.11.1.1
-(5, 'Ver Lista de Faltantes', '/productos/faltantes', TRUE); -- 2.11.2
+(5, 'Gestionar Stock', '/productos/stock', TRUE),                    -- 2.11.1
+(5, 'Establecer Stock', NULL, FALSE),                                -- 2.11.1.1
+(5, 'Ajustar Stock', NULL, FALSE),                                   -- 2.11.1.2
+(5, 'Ver Movimientos de Stock', NULL, FALSE),                        -- 2.11.1.3
+(5, 'Ver Lista de Faltantes', '/productos/faltantes', TRUE),         -- 2.11.2
+(5, 'Registrar Faltante', NULL, FALSE),                              -- 2.11.2.1
+(5, 'Resolver Faltante', NULL, FALSE),                               -- 2.11.2.2
+(5, 'Solicitar Reposición', NULL, FALSE),                            -- 2.11.2.3
+(5, 'Gestionar Pedidos', '/productos/pedidos', TRUE),                -- 2.11.3
+(5, 'Crear Pedido', NULL, FALSE),                                    -- 2.11.3.1
+(5, 'Modificar Pedido', NULL, FALSE),                                -- 2.11.3.2
+(5, 'Recibir Pedido', NULL, FALSE),                                  -- 2.11.3.3
+(5, 'Cancelar Pedido', NULL, FALSE),                                 -- 2.11.3.4
+(5, 'Gestionar Proveedores', '/productos/proveedores', TRUE),        -- 2.11.4
+(5, 'Agregar Proveedor', NULL, FALSE),                               -- 2.11.4.1
+(5, 'Modificar Proveedor', NULL, FALSE),                             -- 2.11.4.2
+(5, 'Eliminar Proveedor', NULL, FALSE),                              -- 2.11.4.3
+(5, 'Reportes de Stock', '/productos/reportes', TRUE),               -- 2.11.5
+(5, 'Ver Movimientos Históricos', NULL, FALSE),                      -- 2.11.5.1
+(5, 'Análisis de Proveedores', NULL, FALSE);                         -- 2.11.5.2
 
 -- Módulo 3: Gestión de ventas
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -109,18 +126,47 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 4, 18),  -- Modificar Producto
 (1, 4, 19),  -- Eliminar Producto
 (1, 4, 20),  -- Ver Productos
+
+-- Stock (expandido)
 (1, 5, 21),  -- Gestionar Stock
 (1, 5, 22),  -- Establecer Stock
-(1, 5, 23),  -- Ver Lista de Faltantes
+(1, 5, 23),  -- Ajustar Stock
+(1, 5, 24),  -- Ver Movimientos de Stock
+(1, 5, 25),  -- Ver Lista de Faltantes
+(1, 5, 26),  -- Registrar Faltante
+(1, 5, 27),  -- Resolver Faltante
+(1, 5, 28),  -- Solicitar Reposición
+(1, 5, 29),  -- Gestionar Pedidos
+(1, 5, 30),  -- Crear Pedido
+(1, 5, 31),  -- Modificar Pedido
+(1, 5, 32),  -- Recibir Pedido
+(1, 5, 33),  -- Cancelar Pedido
+(1, 5, 34),  -- Gestionar Proveedores
+(1, 5, 35),  -- Agregar Proveedor
+(1, 5, 36),  -- Modificar Proveedor
+(1, 5, 37),  -- Eliminar Proveedor
+(1, 5, 38),  -- Reportes de Stock
+(1, 5, 39),  -- Ver Movimientos Históricos
+(1, 5, 40),  -- Análisis de Proveedores
 
 -- Gestión de ventas
-(1, 6, 24),  -- Listado de Ventas
-(1, 6, 25),  -- Modificar Venta 
-(1, 6, 26),  -- Agregar Venta
-(1, 6, 27),  -- Metricas
+(1, 6, 41),  -- Listado de Ventas
+(1, 6, 42),  -- Modificar Venta 
+(1, 6, 43),  -- Agregar Venta
+(1, 6, 44),  -- Metricas
 
 -- Submódulo Clientes
-(1, 7, 28),  -- Agregar Cliente
-(1, 7, 29),  -- Ver Clientes 
-(1, 7, 30),  -- Modificar Cliente
-(1, 7, 31);  -- Eliminar Cliente
+(1, 7, 45),  -- Agregar Cliente
+(1, 7, 46),  -- Ver Clientes 
+(1, 7, 47),  -- Modificar Cliente
+(1, 7, 48);  -- Eliminar Cliente
+
+-- ============================================
+-- DATOS INICIALES PARA GESTIÓN DE INVENTARIO
+-- ============================================
+
+-- Proveedores de ejemplo
+INSERT INTO proveedores (proveedor_nombre, proveedor_contacto, proveedor_email, proveedor_telefono, proveedor_direccion, proveedor_cuit, proveedor_estado) VALUES
+('Proveedor Principal S.A.', 'Juan Pérez', 'contacto@proveedorprincipal.com', '011-4567-8900', 'Av. Corrientes 1234, CABA', '30-12345678-9', 'activo'),
+('Distribuidora Norte', 'María González', 'ventas@distribuidoranorte.com', '011-5678-9001', 'Av. Santa Fe 5678, CABA', '30-87654321-0', 'activo'),
+('Mayorista Central', 'Carlos Rodríguez', 'pedidos@mayoristacentral.com', '011-6789-0123', 'Av. Rivadavia 9876, CABA', '30-11223344-5', 'activo');
