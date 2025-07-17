@@ -79,13 +79,17 @@ INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visi
 (5, 'Modificar Pedido', NULL, FALSE),                                -- 2.11.3.2
 (5, 'Recibir Pedido', NULL, FALSE),                                  -- 2.11.3.3
 (5, 'Cancelar Pedido', NULL, FALSE),                                 -- 2.11.3.4
+(5, 'Ver Histórico Modificaciones', NULL, FALSE),                    -- 2.11.3.5
+(5, 'Actualizar Precios en Recepción', NULL, FALSE),                 -- 2.11.3.6
 (5, 'Gestionar Proveedores', '/productos/proveedores', TRUE),        -- 2.11.4
 (5, 'Agregar Proveedor', NULL, FALSE),                               -- 2.11.4.1
 (5, 'Modificar Proveedor', NULL, FALSE),                             -- 2.11.4.2
 (5, 'Eliminar Proveedor', NULL, FALSE),                              -- 2.11.4.3
 (5, 'Reportes de Stock', '/productos/reportes', TRUE),               -- 2.11.5
 (5, 'Ver Movimientos Históricos', NULL, FALSE),                      -- 2.11.5.1
-(5, 'Análisis de Proveedores', NULL, FALSE);                         -- 2.11.5.2
+(5, 'Análisis de Proveedores', NULL, FALSE),                         -- 2.11.5.2
+(5, 'Ver Histórico de Precios', NULL, FALSE),                        -- 2.11.5.3
+(5, 'Análisis de Ganancias y Pérdidas', NULL, FALSE);                -- 2.11.5.4
 
 -- Módulo 3: Gestión de ventas
 INSERT INTO permisos (modulo_id, permiso_descripcion, permiso_ruta, permiso_visible_menu) VALUES
@@ -141,25 +145,29 @@ INSERT INTO perfiles_modulos_permisos (perfil_id, modulo_id, permiso_id) VALUES
 (1, 5, 31),  -- Modificar Pedido
 (1, 5, 32),  -- Recibir Pedido
 (1, 5, 33),  -- Cancelar Pedido
-(1, 5, 34),  -- Gestionar Proveedores
-(1, 5, 35),  -- Agregar Proveedor
-(1, 5, 36),  -- Modificar Proveedor
-(1, 5, 37),  -- Eliminar Proveedor
-(1, 5, 38),  -- Reportes de Stock
-(1, 5, 39),  -- Ver Movimientos Históricos
-(1, 5, 40),  -- Análisis de Proveedores
+(1, 5, 34),  -- Ver Histórico Modificaciones
+(1, 5, 35),  -- Actualizar Precios en Recepción
+(1, 5, 36),  -- Gestionar Proveedores
+(1, 5, 37),  -- Agregar Proveedor
+(1, 5, 38),  -- Modificar Proveedor
+(1, 5, 39),  -- Eliminar Proveedor
+(1, 5, 40),  -- Reportes de Stock
+(1, 5, 41),  -- Ver Movimientos Históricos
+(1, 5, 42),  -- Análisis de Proveedores
+(1, 5, 43),  -- Ver Histórico de Precios
+(1, 5, 44),  -- Análisis de Ganancias y Pérdidas
 
 -- Gestión de ventas
-(1, 6, 41),  -- Listado de Ventas
-(1, 6, 42),  -- Modificar Venta 
-(1, 6, 43),  -- Agregar Venta
-(1, 6, 44),  -- Metricas
+(1, 6, 45),  -- Listado de Ventas
+(1, 6, 46),  -- Modificar Venta 
+(1, 6, 47),  -- Agregar Venta
+(1, 6, 48),  -- Metricas
 
 -- Submódulo Clientes
-(1, 7, 45),  -- Agregar Cliente
-(1, 7, 46),  -- Ver Clientes 
-(1, 7, 47),  -- Modificar Cliente
-(1, 7, 48);  -- Eliminar Cliente
+(1, 7, 49),  -- Agregar Cliente
+(1, 7, 50),  -- Ver Clientes 
+(1, 7, 51),  -- Modificar Cliente
+(1, 7, 52);  -- Eliminar Cliente
 
 -- ============================================
 -- DATOS INICIALES PARA GESTIÓN DE INVENTARIO

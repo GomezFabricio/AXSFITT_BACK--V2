@@ -304,7 +304,7 @@ CREATE TABLE pedidos (
   pedido_fecha_pedido TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   pedido_fecha_esperada_entrega DATE NULL,
   pedido_fecha_entrega_real DATE NULL,
-  pedido_estado ENUM('pendiente', 'enviado', 'parcial', 'completo', 'cancelado') DEFAULT 'pendiente',
+  pedido_estado ENUM('pendiente', 'enviado', 'modificado', 'parcial', 'completo', 'cancelado') DEFAULT 'pendiente',
   pedido_observaciones TEXT NULL,
   pedido_total DECIMAL(10,2) NULL,
   PRIMARY KEY (pedido_id),
@@ -325,6 +325,47 @@ CREATE TABLE pedidos_detalle (
   FOREIGN KEY (pd_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (pd_producto_id) REFERENCES productos(producto_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (pd_variante_id) REFERENCES variantes(variante_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- ============================================
+-- GESTIÓN DE MODIFICACIONES DE PEDIDOS
+-- ============================================
+
+CREATE TABLE pedidos_modificaciones (
+  pm_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  pm_pedido_id INT UNSIGNED NOT NULL,
+  pm_usuario_id INT UNSIGNED NOT NULL,
+  pm_fecha_modificacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  pm_motivo TEXT NOT NULL,
+  pm_detalle_anterior JSON NOT NULL,
+  pm_detalle_nuevo JSON NOT NULL,
+  PRIMARY KEY (pm_id),
+  FOREIGN KEY (pm_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (pm_usuario_id) REFERENCES usuarios(usuario_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- ============================================
+-- GESTIÓN DE HISTÓRICO DE PRECIOS
+-- ============================================
+
+CREATE TABLE precios_historicos (
+  ph_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ph_producto_id INT UNSIGNED NOT NULL,
+  ph_variante_id INT UNSIGNED NULL,
+  ph_precio_costo_anterior DECIMAL(10,2) NULL,
+  ph_precio_costo_nuevo DECIMAL(10,2) NOT NULL,
+  ph_precio_venta_anterior DECIMAL(10,2) NULL,
+  ph_precio_venta_nuevo DECIMAL(10,2) NULL,
+  ph_motivo ENUM('recepcion_pedido', 'ajuste_manual', 'promocion', 'inflacion', 'correccion') NOT NULL,
+  ph_pedido_id INT UNSIGNED NULL,
+  ph_usuario_id INT UNSIGNED NOT NULL,
+  ph_fecha_cambio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ph_observaciones TEXT NULL,
+  PRIMARY KEY (ph_id),
+  FOREIGN KEY (ph_producto_id) REFERENCES productos(producto_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (ph_variante_id) REFERENCES variantes(variante_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  FOREIGN KEY (ph_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE SET NULL ON UPDATE CASCADE,
+  FOREIGN KEY (ph_usuario_id) REFERENCES usuarios(usuario_id) ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 -- ============================================

@@ -41,6 +41,8 @@
             2.11.3.2 Modificar Pedido (permiso interno, NO visible en menú, asociado a submodulo 2.11.3)
             2.11.3.3 Recibir Pedido (permiso interno, NO visible en menú, asociado a submodulo 2.11.3)
             2.11.3.4 Cancelar Pedido (permiso interno, NO visible en menú, asociado a submodulo 2.11.3)
+            2.11.3.5 Ver Histórico Modificaciones (permiso interno, NO visible en menú, asociado a submodulo 2.11.3)
+            2.11.3.6 Actualizar Precios en Recepción (permiso interno, NO visible en menú, asociado a submodulo 2.11.3)
         2.11.4 Gestionar Proveedores (permiso visible en menú, asociado a submodulo 2.11)
             2.11.4.1 Agregar Proveedor (permiso interno, NO visible en menú, asociado a submodulo 2.11.4)
             2.11.4.2 Modificar Proveedor (permiso interno, NO visible en menú, asociado a submodulo 2.11.4)
@@ -48,6 +50,8 @@
         2.11.5 Reportes de Stock (permiso visible en menú, asociado a submodulo 2.11)
             2.11.5.1 Ver Movimientos Históricos (permiso interno, NO visible en menú, asociado a submodulo 2.11.5)
             2.11.5.2 Análisis de Proveedores (permiso interno, NO visible en menú, asociado a submodulo 2.11.5)
+            2.11.5.3 Ver Histórico de Precios (permiso interno, NO visible en menú, asociado a submodulo 2.11.5)
+            2.11.5.4 Análisis de Ganancias y Pérdidas (permiso interno, NO visible en menú, asociado a submodulo 2.11.5)
 
 3 Gestión de ventas (modulo)
     3.1 Listado de Ventas (permiso visible en menú, asociado a modulo 3)
