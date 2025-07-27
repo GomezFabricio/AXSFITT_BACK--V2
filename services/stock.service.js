@@ -72,13 +72,13 @@ export class StockService {
         COALESCE(s.cantidad, 0) AS stock_actual,
         s.stock_minimo,
         s.stock_maximo,
-        f.cantidad_faltante,
+        f.faltante_cantidad_faltante,
         ip.imagen_url,
         'producto' AS tipo,
-        f.id_faltante,
-        f.fecha_deteccion
+        f.faltante_id,
+        f.faltante_fecha_deteccion
       FROM faltantes f
-      JOIN productos p ON f.producto_id = p.producto_id
+      JOIN productos p ON f.faltante_producto_id = p.producto_id
       LEFT JOIN stock s ON s.producto_id = p.producto_id
       LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
       LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
@@ -86,7 +86,7 @@ export class StockService {
         FROM imagenes_productos 
         WHERE producto_id = p.producto_id
       )
-      WHERE f.resuelto = FALSE AND f.producto_id IS NOT NULL
+      WHERE f.faltante_resuelto = FALSE AND f.faltante_producto_id IS NOT NULL
     `,
 
     // Obtener faltantes registrados de variantes
@@ -98,21 +98,21 @@ export class StockService {
         COALESCE(s.cantidad, 0) AS stock_actual,
         s.stock_minimo,
         s.stock_maximo,
-        f.cantidad_faltante,
+        f.faltante_cantidad_faltante,
         ip.imagen_url,
         GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
         'variante' AS tipo,
-        f.id_faltante,
-        f.fecha_deteccion
+        f.faltante_id,
+        f.faltante_fecha_deteccion
       FROM faltantes f
-      JOIN variantes v ON f.variante_id = v.variante_id
+      JOIN variantes v ON f.faltante_variante_id = v.variante_id
       JOIN productos p ON v.producto_id = p.producto_id
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-      WHERE f.resuelto = FALSE AND f.variante_id IS NOT NULL
-      GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url, f.id_faltante, f.fecha_deteccion
+      WHERE f.faltante_resuelto = FALSE AND f.faltante_variante_id IS NOT NULL
+      GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url, f.faltante_id, f.faltante_fecha_deteccion
     `,
 
     // Obtener productos con stock por debajo del mínimo (no registrados)
@@ -145,7 +145,7 @@ export class StockService {
         AND s.variante_id IS NULL
         AND NOT EXISTS (
           SELECT 1 FROM faltantes f 
-          WHERE f.producto_id = p.producto_id AND f.resuelto = FALSE
+          WHERE f.faltante_producto_id = p.producto_id AND f.faltante_resuelto = FALSE
         )
       ORDER BY cantidad_faltante DESC
     `,
@@ -178,7 +178,7 @@ export class StockService {
         AND s.cantidad < s.stock_minimo
         AND NOT EXISTS (
           SELECT 1 FROM faltantes f 
-          WHERE f.variante_id = v.variante_id AND f.resuelto = FALSE
+          WHERE f.faltante_variante_id = v.variante_id AND f.faltante_resuelto = FALSE
         )
       GROUP BY v.variante_id, p.producto_nombre, v.variante_sku, s.cantidad, s.stock_minimo, s.stock_maximo, ip.imagen_url
       ORDER BY cantidad_faltante DESC

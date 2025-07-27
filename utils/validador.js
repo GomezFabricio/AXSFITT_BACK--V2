@@ -188,4 +188,68 @@ export class Validador {
       errores: Object.keys(errores).length > 0 ? errores : null
     };
   }
+  /**
+   * Valida los datos básicos de un proveedor
+   * @param {Object} datos - Datos del proveedor a validar
+   * @param {boolean} [parcial=false] - Si es true, permite validación parcial (para updates)
+   * @returns {Object|null} Objeto con errores si hay, o null si es válido
+   */
+  static validarProveedor(datos, parcial = false) {
+    const {
+      proveedor_nombre,
+      proveedor_contacto,
+      proveedor_email,
+      proveedor_telefono,
+      proveedor_direccion,
+      proveedor_cuit
+    } = datos;
+
+    const errores = {};
+
+    if (!parcial || proveedor_nombre !== undefined) {
+      if (!this.esTextoValido(proveedor_nombre)) {
+        errores.proveedor_nombre = 'El nombre del proveedor es obligatorio';
+      } else if (proveedor_nombre.trim().length < 2) {
+        errores.proveedor_nombre = 'El nombre debe tener al menos 2 caracteres';
+      } else if (proveedor_nombre.trim().length > 100) {
+        errores.proveedor_nombre = 'El nombre no puede tener más de 100 caracteres';
+      }
+    }
+
+    if (!parcial || proveedor_contacto !== undefined) {
+      if (proveedor_contacto && proveedor_contacto.trim().length > 100) {
+        errores.proveedor_contacto = 'El contacto no puede tener más de 100 caracteres';
+      }
+    }
+
+    if (!parcial || proveedor_email !== undefined) {
+      if (!proveedor_email || proveedor_email.trim() === '') {
+        errores.proveedor_email = 'El email es obligatorio';
+      } else if (!this.validarEmail(proveedor_email)) {
+        errores.proveedor_email = 'El formato del email es inválido';
+      } else if (proveedor_email.trim().length > 100) {
+        errores.proveedor_email = 'El email no puede tener más de 100 caracteres';
+      }
+    }
+
+    if (!parcial || proveedor_telefono !== undefined) {
+      if (proveedor_telefono && proveedor_telefono.trim().length > 30) {
+        errores.proveedor_telefono = 'El teléfono no puede tener más de 30 caracteres';
+      }
+    }
+
+    if (!parcial || proveedor_direccion !== undefined) {
+      if (proveedor_direccion && proveedor_direccion.trim().length > 255) {
+        errores.proveedor_direccion = 'La dirección no puede tener más de 255 caracteres';
+      }
+    }
+
+    if (!parcial || proveedor_cuit !== undefined) {
+      if (proveedor_cuit && proveedor_cuit.trim().length > 20) {
+        errores.proveedor_cuit = 'El CUIT no puede tener más de 20 caracteres';
+      }
+    }
+
+    return Object.keys(errores).length > 0 ? errores : null;
+  }
 }
