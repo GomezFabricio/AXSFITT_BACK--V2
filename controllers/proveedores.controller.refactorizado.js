@@ -1,3 +1,4 @@
+
 import ProveedorService from '../services/proveedor.service.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 import { Validador } from '../utils/validador.js';
@@ -70,5 +71,19 @@ export const eliminarProveedor = async (req, res) => {
     return ApiResponse.success(res, null, 'Proveedor eliminado exitosamente.');
   } catch (error) {
     return ApiResponse.manejarErrorDB(error, res, 'eliminar proveedor');
+  }
+};
+
+// Reactivar proveedor
+export const reactivarProveedor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const actualizado = await ProveedorService.reactivarProveedor(id);
+    if (!actualizado) {
+      return ApiResponse.error(res, 'Proveedor no encontrado o ya activo.', 404);
+    }
+    return ApiResponse.success(res, null, 'Proveedor reactivado exitosamente.');
+  } catch (error) {
+    return ApiResponse.manejarErrorDB(error, res, 'reactivar proveedor');
   }
 };

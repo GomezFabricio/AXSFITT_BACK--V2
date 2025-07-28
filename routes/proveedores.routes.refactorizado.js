@@ -4,14 +4,13 @@ import {
   obtenerProveedorPorId,
   crearProveedor,
   actualizarProveedor,
-  eliminarProveedor
+  eliminarProveedor,
+  reactivarProveedor
 } from '../controllers/proveedores.controller.refactorizado.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
 
-
 const router = Router();
-
 
 // Obtener todos los proveedores
 router.get(
@@ -52,5 +51,14 @@ router.delete(
   validarPermisos('Eliminar Proveedor'),
   eliminarProveedor
 );
+
+// Reactivar proveedor
+router.put(
+  '/:id/reactivar',
+  authenticate,
+  validarPermisos('Modificar Proveedor'),
+  reactivarProveedor
+);
+
 
 export default router;

@@ -4,7 +4,6 @@ import { pool } from '../db.js';
  * Servicio para gestionar operaciones relacionadas con proveedores
  * Métodos: obtenerProveedores, obtenerProveedorPorId, crearProveedor, actualizarProveedor, eliminarProveedor
  */
-
 class ProveedorService {
   // ==================== QUERIES ESTÁTICAS ====================
   static QUERIES = {
@@ -28,7 +27,18 @@ class ProveedorService {
       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ACTUALIZAR_PROVEEDOR: (campos) => `UPDATE proveedores SET ${campos.join(', ')} WHERE proveedor_id = ?`,
     ELIMINAR_PROVEEDOR: `UPDATE proveedores SET proveedor_estado = 'inactivo' WHERE proveedor_id = ?`,
+    REACTIVAR_PROVEEDOR: `UPDATE proveedores SET proveedor_estado = 'activo' WHERE proveedor_id = ?`,
   };
+
+  /**
+   * Reactiva un proveedor (cambia estado a 'activo')
+   * @param {number} id - ID del proveedor
+   * @returns {Promise<boolean>} True si se actualizó
+   */
+  async reactivarProveedor(id) {
+    const [result] = await pool.query(ProveedorService.QUERIES.REACTIVAR_PROVEEDOR, [id]);
+    return result.affectedRows > 0;
+  }
 
   /**
    * Obtiene todos los proveedores activos
