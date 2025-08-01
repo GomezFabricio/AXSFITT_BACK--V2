@@ -274,6 +274,8 @@ CREATE TABLE pedidos (
   pedido_estado ENUM('pendiente', 'enviado', 'modificado', 'parcial', 'completo', 'cancelado') DEFAULT 'pendiente',
   pedido_observaciones TEXT NULL,
   pedido_total DECIMAL(10,2) NULL,
+  pedido_descuento DECIMAL(10,2) DEFAULT 0,
+  pedido_costo_envio DECIMAL(10,2) DEFAULT 0,
   PRIMARY KEY (pedido_id),
   FOREIGN KEY (pedido_proveedor_id) REFERENCES proveedores(proveedor_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (pedido_usuario_id) REFERENCES usuarios(usuario_id) ON DELETE RESTRICT ON UPDATE CASCADE

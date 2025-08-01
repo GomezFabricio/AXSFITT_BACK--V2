@@ -75,6 +75,23 @@ class ProductoController {
   }
 
   /**
+   * Busca productos por nombre sin filtrar por estado
+   */
+  static async buscarProductosPorNombreSinEstado(req, res) {
+    try {
+      const { nombre, categoria_id } = req.query;
+      if (!nombre || nombre.trim().length < 2) {
+        return res.status(400).json({ message: 'El nombre debe tener al menos 2 caracteres.' });
+      }
+      const productos = await ProductoService.buscarProductosPorNombreSinEstado(nombre.trim(), categoria_id);
+      res.status(200).json(productos);
+    } catch (error) {
+      console.error('Error al buscar productos (sin estado):', error);
+      res.status(500).json({ message: 'Error interno al buscar productos.' });
+    }
+  }
+
+  /**
    * Obtiene imágenes temporales de un usuario
    */
   static async obtenerImagenesTemporales(req, res) {

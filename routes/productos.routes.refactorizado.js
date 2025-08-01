@@ -63,10 +63,19 @@ router.get('/detalles-stock/:producto_id',
 );
 
 // Buscar productos por nombre (autocomplete) - NUEVA FUNCIONALIDAD
+
+// Buscar productos por nombre (autocomplete) - NUEVA FUNCIONALIDAD
 router.get('/buscar', 
   authenticate, 
   validarPermisos('Ver Productos'), 
   ProductoController.buscarProductosPorNombre
+);
+
+// Buscar productos por nombre sin filtrar por estado
+router.get('/buscar-sin-estado', 
+  authenticate, 
+  validarPermisos('Ver Productos'), 
+  ProductoController.buscarProductosPorNombreSinEstado
 );
 
 // Verificar nombre duplicado - NUEVA FUNCIONALIDAD

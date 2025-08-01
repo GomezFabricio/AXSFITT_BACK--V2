@@ -295,6 +295,37 @@ class ProductoService {
     return productos;
   }
 
+    /**
+   * Busca productos por nombre parcial (optimizado)
+   * @param {string} nombre - Nombre parcial del producto
+   * @param {number} categoriaId - ID de la categoría (opcional)
+   * @returns {Array} Lista de productos que coinciden
+   */
+  static async buscarProductosPorNombreSinEstado(nombre, categoriaId = null) {
+    const params = [`%${nombre}%`];
+    const whereCategoria = categoriaId ? 'AND p.categoria_id = ?' : '';
+    if (categoriaId) params.push(categoriaId);
+
+    // Traer la imagen principal (la de menor orden) igual que ventas
+    const [productos] = await pool.query(`
+      SELECT 
+        p.producto_id, 
+        p.producto_nombre, 
+        p.categoria_id, 
+        c.categoria_nombre,
+        ip.imagen_url
+      FROM productos p
+      LEFT JOIN categorias c ON p.categoria_id = c.categoria_id
+      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = (
+        SELECT MIN(imagen_orden) FROM imagenes_productos WHERE producto_id = p.producto_id
+      )
+      WHERE p.producto_nombre LIKE ? ${whereCategoria}
+      ORDER BY p.producto_nombre ASC 
+      LIMIT 10
+    `, params);
+    return productos;
+  }
+
   // Métodos CRUD optimizados
   static async eliminarProducto(id) {
     const [result] = await pool.query(
