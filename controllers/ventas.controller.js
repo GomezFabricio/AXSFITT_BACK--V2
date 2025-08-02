@@ -130,8 +130,10 @@ export const obtenerVentaPorId = async (req, res) => {
         vd.vd_cantidad,
         vd.vd_precio_unitario,
         vd.vd_subtotal,
-        vd.producto_id,
-        COALESCE(p.producto_nombre, vd.producto_nombre) as producto_nombre,
+        COALESCE(p.producto_id, v.producto_id, vd.producto_id) as producto_id,
+        COALESCE(p.producto_nombre, (
+          SELECT p2.producto_nombre FROM variantes v2 JOIN productos p2 ON v2.producto_id = p2.producto_id WHERE v2.variante_id = vd.variante_id LIMIT 1
+        ), vd.producto_nombre) as producto_nombre,
         vd.variante_id,
         v.variante_sku,
         COALESCE(
@@ -147,11 +149,11 @@ export const obtenerVentaPorId = async (req, res) => {
       LEFT JOIN imagenes_productos ip ON (
         CASE 
           WHEN v.imagen_id IS NOT NULL THEN ip.imagen_id = v.imagen_id
-          ELSE ip.producto_id = p.producto_id AND ip.imagen_orden = 0
+          ELSE ip.producto_id = COALESCE(p.producto_id, v.producto_id) AND ip.imagen_orden = 0
         END
       )
       WHERE vd.venta_id = ?
-      GROUP BY vd.vd_id, vd.vd_precio_unitario, vd.producto_nombre, v.variante_sku, ip.imagen_url, vd.variante_descripcion
+      GROUP BY vd.vd_id, vd.vd_precio_unitario, producto_nombre, v.variante_sku, ip.imagen_url, vd.variante_descripcion
     `, [id]);
     
     resultado.productos = productos;

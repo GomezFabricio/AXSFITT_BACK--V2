@@ -24,6 +24,37 @@ class PedidoService {
       ORDER BY p.pedido_fecha_pedido DESC
     `,
     OBTENER_PEDIDO_POR_ID: 'SELECT * FROM pedidos WHERE pedido_id = ?',
+    OBTENER_PEDIDO_CABECERA: `
+      SELECT p.*, pr.proveedor_nombre, u.usuario_id, per.persona_nombre, per.persona_apellido
+      FROM pedidos p
+      LEFT JOIN proveedores pr ON p.pedido_proveedor_id = pr.proveedor_id
+      LEFT JOIN usuarios u ON p.pedido_usuario_id = u.usuario_id
+      LEFT JOIN personas per ON u.persona_id = per.persona_id
+      WHERE p.pedido_id = ?
+    `,
+    OBTENER_PEDIDO_ITEMS: `
+      SELECT d.pd_id, d.pd_producto_id, d.pd_variante_id, d.pd_cantidad_pedida, d.pd_precio_unitario, d.pd_subtotal,
+        COALESCE(p.producto_nombre, (
+          SELECT p2.producto_nombre FROM variantes v2 JOIN productos p2 ON v2.producto_id = p2.producto_id WHERE v2.variante_id = d.pd_variante_id LIMIT 1
+        )) as producto_nombre,
+        v.variante_precio_venta, v.variante_precio_costo,
+        v.variante_sku, v.variante_id,
+        (
+          SELECT GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ')
+          FROM valores_variantes vv
+          JOIN atributos a ON vv.atributo_id = a.atributo_id
+          WHERE vv.variante_id = d.pd_variante_id
+        ) AS variante_atributos
+      FROM pedidos_detalle d
+      LEFT JOIN productos p ON d.pd_producto_id = p.producto_id
+      LEFT JOIN variantes v ON d.pd_variante_id = v.variante_id
+      WHERE d.pd_pedido_id = ?
+    `,
+    OBTENER_PEDIDO_SIN_REGISTRAR: `
+      SELECT d.pd_id, d.pd_producto_sin_registrar AS nombre, d.pd_cantidad_pedida, d.pd_precio_unitario, d.pd_subtotal
+      FROM pedidos_detalle d
+      WHERE d.pd_pedido_id = ? AND d.pd_producto_sin_registrar IS NOT NULL
+    `,
     CREAR_PEDIDO: `INSERT INTO pedidos (
       pedido_proveedor_id,
       pedido_usuario_id,
@@ -35,7 +66,7 @@ class PedidoService {
       pedido_fecha_esperada_entrega
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     CREAR_DETALLE: `INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_id, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, ?, ?)`,
-    CREAR_DETALLE_SIN_REGISTRAR: `INSERT INTO pedidos_detalle (pd_pedido_id, producto_sin_registrar, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, ?, ?)`,
+    CREAR_DETALLE_SIN_REGISTRAR: `INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_sin_registrar, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, ?, ?)`,
     ACTUALIZAR_PEDIDO: (campos) => `UPDATE pedidos SET ${campos.join(', ')} WHERE pedido_id = ?`,
     ELIMINAR_PEDIDO: `UPDATE pedidos SET pedido_estado = 'cancelado' WHERE pedido_id = ?`,
     RECEPCIONAR_PEDIDO: `UPDATE pedidos SET pedido_estado = 'recibido', pedido_fecha_recepcion = ? WHERE pedido_id = ?`,
@@ -57,11 +88,40 @@ class PedidoService {
   }
 
   /**
-   * Obtiene un pedido por ID
+   * Obtiene un pedido por ID con todo el detalle (cabecera, ítems, totales, descuentos, variantes, productos sin registrar)
    */
   async obtenerPedidoPorId(id) {
-    const [rows] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_POR_ID, [id]);
-    return rows[0] || null;
+    // 1. Cabecera del pedido
+    const [cabeceraRows] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_CABECERA, [id]);
+    if (!cabeceraRows.length) return null;
+    const pedido = cabeceraRows[0];
+
+    // 2. Ítems del pedido (productos y variantes)
+    const [items] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_ITEMS, [id]);
+
+    // 3. Productos sin registrar (si existen)
+    const [sinRegistrar] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_SIN_REGISTRAR, [id]);
+
+    // 4. Subtotal calculado (solo ítems registrados y sin registrar)
+    const subtotal = [...items, ...sinRegistrar].reduce((acc, item) => acc + (Number(item.pd_subtotal) || (Number(item.pd_precio_unitario) * Number(item.pd_cantidad_pedida) || 0)), 0);
+
+    // 5. Calcular descuento como porcentaje
+    const descuentoPorcentaje = Number(pedido.pedido_descuento) || 0;
+    const descuentoCalculado = subtotal * (descuentoPorcentaje / 100);
+    const costoEnvio = Number(pedido.pedido_costo_envio) || 0;
+    const totalCalculado = subtotal - descuentoCalculado + costoEnvio;
+
+    // 6. Retornar objeto completo
+    return {
+      ...pedido,
+      items,
+      productosSinRegistrar: sinRegistrar,
+      subtotal,
+      descuento: descuentoPorcentaje,
+      descuentoCalculado,
+      costo_envio: costoEnvio,
+      total: Number(pedido.pedido_total) || totalCalculado
+    };
   }
 
   /**
@@ -105,7 +165,19 @@ class PedidoService {
       const pedido_id = pedidoRes.insertId;
       // Detalles productos registrados
       for (const prod of productos) {
-        await conn.query(PedidoService.QUERIES.CREAR_DETALLE, [pedido_id, prod.producto_id, prod.cantidad, prod.precio_costo]);
+        if (prod.variante_id) {
+          // Si tiene variante, guardar SOLO en pd_variante_id y dejar pd_producto_id en NULL
+          await conn.query(
+            'INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_id, pd_variante_id, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, NULL, ?, ?, ?)',
+            [pedido_id, prod.variante_id, prod.cantidad, prod.precio_costo]
+          );
+        } else {
+          // Si no tiene variante, guardar SOLO producto y dejar variante en NULL
+          await conn.query(
+            'INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_id, pd_variante_id, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, NULL, ?, ?)',
+            [pedido_id, prod.producto_id, prod.cantidad, prod.precio_costo]
+          );
+        }
       }
       // Detalles productos sin registrar
       for (const prod of productosSinRegistrar) {

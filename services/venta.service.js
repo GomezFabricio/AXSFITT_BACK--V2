@@ -343,7 +343,7 @@ export class VentaService {
             'cantidad', vd.vd_cantidad,
             'precio_unitario', vd.vd_precio_unitario,
             'subtotal', vd.vd_subtotal,
-            'producto_nombre', vd.producto_nombre,
+            'producto_nombre', COALESCE(p.producto_nombre, vd.producto_nombre),
             'variante_descripcion', vd.variante_descripcion,
             'producto_sku', p.producto_sku,
             'variante_sku', var.variante_sku

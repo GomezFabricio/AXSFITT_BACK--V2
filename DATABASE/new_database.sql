@@ -284,8 +284,9 @@ CREATE TABLE pedidos (
 CREATE TABLE pedidos_detalle (
   pd_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   pd_pedido_id INT UNSIGNED NOT NULL,
-  pd_producto_id INT UNSIGNED NOT NULL,
+  pd_producto_id INT UNSIGNED NULL,
   pd_variante_id INT UNSIGNED NULL,
+  pd_producto_sin_registrar VARCHAR(255) NULL,
   pd_cantidad_pedida INT UNSIGNED NOT NULL,
   pd_cantidad_recibida INT UNSIGNED DEFAULT 0,
   pd_precio_unitario DECIMAL(10,2) NULL,
