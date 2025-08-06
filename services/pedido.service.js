@@ -50,11 +50,7 @@ class PedidoService {
       LEFT JOIN variantes v ON d.pd_variante_id = v.variante_id
       WHERE d.pd_pedido_id = ?
     `,
-    OBTENER_PEDIDO_SIN_REGISTRAR: `
-      SELECT d.pd_id, d.pd_producto_sin_registrar AS nombre, d.pd_cantidad_pedida, d.pd_precio_unitario, d.pd_subtotal
-      FROM pedidos_detalle d
-      WHERE d.pd_pedido_id = ? AND d.pd_producto_sin_registrar IS NOT NULL
-    `,
+    // OBTENER_PEDIDO_SIN_REGISTRAR eliminado: ahora se usa pedidos_borrador_producto
     CREAR_PEDIDO: `INSERT INTO pedidos (
       pedido_proveedor_id,
       pedido_usuario_id,
@@ -99,23 +95,49 @@ class PedidoService {
     // 2. Ítems del pedido (productos y variantes)
     const [items] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_ITEMS, [id]);
 
-    // 3. Productos sin registrar (si existen)
-    const [sinRegistrar] = await pool.query(PedidoService.QUERIES.OBTENER_PEDIDO_SIN_REGISTRAR, [id]);
+    // 3. Productos sin registrar: ahora se obtienen de pedidos_borrador_producto (ya se consulta más abajo)
+    const sinRegistrar = [];
 
-    // 4. Subtotal calculado (solo ítems registrados y sin registrar)
-    const subtotal = [...items, ...sinRegistrar].reduce((acc, item) => acc + (Number(item.pd_subtotal) || (Number(item.pd_precio_unitario) * Number(item.pd_cantidad_pedida) || 0)), 0);
+    // 4. Variantes en borrador
+    const [variantesBorrador] = await pool.query(`
+      SELECT vb.*, p.producto_nombre
+      FROM variantes_borrador vb
+      LEFT JOIN productos p ON vb.vb_producto_id = p.producto_id
+      WHERE vb.vb_pedido_id = ?
+    `, [id]);
+    // Parsear atributos JSON si corresponde
+    variantesBorrador.forEach(vb => {
+      try {
+        vb.vb_atributos = typeof vb.vb_atributos === 'string' ? JSON.parse(vb.vb_atributos) : vb.vb_atributos;
+      } catch (e) {}
+    });
 
-    // 5. Calcular descuento como porcentaje
+    // 5. Productos borrador (sin registrar, tabla nueva)
+    const [productosBorrador] = await pool.query(`
+      SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?
+    `, [id]);
+
+    // 6. Subtotal calculado (solo ítems registrados y borrador)
+    const subtotal = [...items, ...variantesBorrador, ...productosBorrador].reduce((acc, item) => {
+      const cantidad = item.pd_cantidad_pedida || item.vb_cantidad || item.pbp_cantidad || 0;
+      const precio = item.pd_precio_unitario || item.vb_precio_unitario || item.pbp_precio_unitario || 0;
+      const subtotalItem = item.pd_subtotal || (precio * cantidad);
+      return acc + Number(subtotalItem || 0);
+    }, 0);
+
+    // 7. Calcular descuento como porcentaje
     const descuentoPorcentaje = Number(pedido.pedido_descuento) || 0;
     const descuentoCalculado = subtotal * (descuentoPorcentaje / 100);
     const costoEnvio = Number(pedido.pedido_costo_envio) || 0;
     const totalCalculado = subtotal - descuentoCalculado + costoEnvio;
 
-    // 6. Retornar objeto completo
+    // 8. Retornar objeto completo
     return {
       ...pedido,
       items,
-      productosSinRegistrar: sinRegistrar,
+      // productosSinRegistrar: sinRegistrar, // ya no se usa, se mantiene para compatibilidad si es necesario
+      variantesBorrador,
+      productosBorrador,
       subtotal,
       descuento: descuentoPorcentaje,
       descuentoCalculado,
@@ -137,11 +159,27 @@ class PedidoService {
         pedido_usuario_id,
         productos = [],
         productosSinRegistrar = [],
+        variantesBorrador = [],
+        productosBorrador = [],
         descuento = 0,
         costo_envio = 0,
         fecha_esperada_entrega = null,
         total = null
       } = data;
+      // Guardar variantes en borrador
+      for (const vb of variantesBorrador) {
+        await conn.query(
+          'INSERT INTO variantes_borrador (vb_pedido_id, vb_producto_id, vb_atributos, vb_cantidad, vb_precio_unitario, vb_estado) VALUES (?, ?, ?, ?, ?, ?)',
+          [pedido_id, vb.vb_producto_id, JSON.stringify(vb.vb_atributos), vb.vb_cantidad, vb.vb_precio_unitario, 'borrador']
+        );
+      }
+      // Guardar productos en borrador
+      for (const pb of productosBorrador) {
+        await conn.query(
+          'INSERT INTO pedidos_borrador_producto (pbp_pedido_id, pbp_nombre, pbp_cantidad, pbp_precio_unitario, pbp_estado) VALUES (?, ?, ?, ?, ?)',
+          [pedido_id, pb.pbp_nombre, pb.pbp_cantidad, pb.pbp_precio_unitario, 'borrador']
+        );
+      }
       const fechaPedido = new Date();
       // Calcular total si no viene
       let pedido_total = total;
@@ -232,6 +270,61 @@ class PedidoService {
           await conn.query('INSERT INTO precios_historicos (producto_id, precio, fecha, referencia) VALUES (?, ?, ?, ?)', [item.producto_id, item.precio_costo_nuevo, new Date(), `Pedido ${pedido_id}`]);
         }
       }
+
+      // 1. Migrar variantes en borrador a tablas oficiales
+      const [variantesBorrador] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+      for (const vb of variantesBorrador) {
+        // 1.1. Si el producto ya tiene atributos, usar los existentes. Si no, crear los atributos.
+        let atributoIds = {};
+        if (vb.vb_atributos && Array.isArray(vb.vb_atributos)) {
+          for (const attr of vb.vb_atributos) {
+            // Buscar o crear atributo
+            let [rows] = await conn.query('SELECT atributo_id FROM atributos WHERE atributo_nombre = ? AND producto_id = ?', [attr.nombre, vb.vb_producto_id]);
+            let atributo_id;
+            if (rows.length > 0) {
+              atributo_id = rows[0].atributo_id;
+            } else {
+              let res = await conn.query('INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)', [vb.vb_producto_id, attr.nombre]);
+              atributo_id = res[0].insertId;
+            }
+            atributoIds[attr.nombre] = atributo_id;
+          }
+        }
+        // 1.2. Crear variante inactiva
+        let resVar = await conn.query('INSERT INTO variantes (producto_id, variante_estado, variante_precio_costo) VALUES (?, ?, ?)', [vb.vb_producto_id, 'inactivo', vb.vb_precio_unitario]);
+        let variante_id = resVar[0].insertId;
+        // 1.3. Crear valores de variante
+        if (vb.vb_atributos && Array.isArray(vb.vb_atributos)) {
+          for (const attr of vb.vb_atributos) {
+            let atributo_id = atributoIds[attr.nombre];
+            // Buscar o crear valor
+            let [valRows] = await conn.query('SELECT valor_id FROM valores_variantes WHERE atributo_id = ? AND valor_nombre = ?', [atributo_id, attr.valor]);
+            let valor_id;
+            if (valRows.length > 0) {
+              valor_id = valRows[0].valor_id;
+            } else {
+              let res = await conn.query('INSERT INTO valores_variantes (atributo_id, valor_nombre) VALUES (?, ?)', [atributo_id, attr.valor]);
+              valor_id = res[0].insertId;
+            }
+            // Asociar valor a variante
+            await conn.query('INSERT INTO variante_valor (variante_id, valor_id) VALUES (?, ?)', [variante_id, valor_id]);
+          }
+        }
+      }
+      // Eliminar variantes borrador migradas
+      await conn.query('DELETE FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+
+      // 2. Migrar productos borrador a tabla oficial de productos (inactivos)
+      const [productosBorrador] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+      for (const pb of productosBorrador) {
+        // Crear producto inactivo
+        let resProd = await conn.query('INSERT INTO productos (producto_nombre, producto_estado) VALUES (?, ?)', [pb.pbp_nombre, 'inactivo']);
+        let producto_id = resProd[0].insertId;
+        // Si tiene variantes asociadas, migrarlas (no implementado aquí, requiere lógica adicional si se usan variantes en productos borrador)
+      }
+      // Eliminar productos borrador migrados
+      await conn.query('DELETE FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+
       // Registrar modificación
       await conn.query(PedidoService.QUERIES.CREAR_MODIFICACION, [pedido_id, usuario_id, 'Recepción de pedido', new Date()]);
       await conn.commit();

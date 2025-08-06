@@ -20,6 +20,7 @@ export const obtenerPedidoPorId = async (req, res) => {
     if (!pedido) {
       return ApiResponse.error(res, 'Pedido no encontrado.', 404);
     }
+    // Unificar productosSinRegistrar, variantesBorrador y productosBorrador en la respuesta si es necesario
     return ApiResponse.success(res, pedido, 'Pedido obtenido exitosamente');
   } catch (error) {
     return ApiResponse.manejarErrorDB(error, res, 'obtener pedido');
@@ -31,6 +32,7 @@ export const crearPedido = async (req, res) => {
   try {
     // Validar datos
     // TODO: usar Validador.validarPedido si existe
+    // Permitir variantesBorrador y productosBorrador en el body
     const pedido_id = await PedidoService.crearPedido(req.body);
     return ApiResponse.success(res, { pedido_id }, 'Pedido creado exitosamente.', 201);
   } catch (error) {

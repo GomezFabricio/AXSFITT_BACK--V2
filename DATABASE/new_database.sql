@@ -1,4 +1,21 @@
 -- ============================================
+-- VARIANTES EN BORRADOR (para productos existentes)
+-- ============================================
+
+CREATE TABLE variantes_borrador (
+  vb_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vb_pedido_id INT UNSIGNED NOT NULL,
+  vb_producto_id INT UNSIGNED NOT NULL,
+  vb_atributos JSON NOT NULL,
+  vb_cantidad INT UNSIGNED NOT NULL DEFAULT 1,
+  vb_precio_unitario DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  vb_estado ENUM('borrador','registrado') DEFAULT 'borrador',
+  vb_fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (vb_id),
+  FOREIGN KEY (vb_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (vb_producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+-- ============================================
 -- GESTIÓN DE USUARIOS Y PERMISOS
 -- ============================================
 
@@ -286,7 +303,6 @@ CREATE TABLE pedidos_detalle (
   pd_pedido_id INT UNSIGNED NOT NULL,
   pd_producto_id INT UNSIGNED NULL,
   pd_variante_id INT UNSIGNED NULL,
-  pd_producto_sin_registrar VARCHAR(255) NULL,
   pd_cantidad_pedida INT UNSIGNED NOT NULL,
   pd_cantidad_recibida INT UNSIGNED DEFAULT 0,
   pd_precio_unitario DECIMAL(10,2) NULL,
@@ -295,6 +311,26 @@ CREATE TABLE pedidos_detalle (
   FOREIGN KEY (pd_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
   FOREIGN KEY (pd_producto_id) REFERENCES productos(producto_id) ON DELETE RESTRICT ON UPDATE CASCADE,
   FOREIGN KEY (pd_variante_id) REFERENCES variantes(variante_id) ON DELETE RESTRICT ON UPDATE CASCADE
+);
+
+-- ============================================
+-- PRODUCTOS DE PEDIDO EN BORRADOR
+-- ============================================
+
+CREATE TABLE pedidos_borrador_producto (
+  pbp_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  pbp_pedido_id INT UNSIGNED NOT NULL,
+  pbp_nombre VARCHAR(255) NOT NULL,
+  pbp_atributos JSON NULL,
+  pbp_variantes JSON NULL,
+  pbp_cantidad INT UNSIGNED NOT NULL DEFAULT 1,
+  pbp_precio_unitario DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  pbp_subtotal DECIMAL(10,2) GENERATED ALWAYS AS (pbp_cantidad * pbp_precio_unitario) STORED,
+  pbp_estado ENUM('borrador','registrado') DEFAULT 'borrador',
+  pbp_fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  pbp_fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (pbp_id),
+  FOREIGN KEY (pbp_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- ============================================
