@@ -29,13 +29,47 @@ export const obtenerPedidoPorId = async (req, res) => {
 
 // Crear pedido
 export const crearPedido = async (req, res) => {
+  console.log('=== INICIO CREAR PEDIDO ===');
   try {
-    // Validar datos
-    // TODO: usar Validador.validarPedido si existe
-    // Permitir variantesBorrador y productosBorrador en el body
-    const pedido_id = await PedidoService.crearPedido(req.body);
-    return ApiResponse.success(res, { pedido_id }, 'Pedido creado exitosamente.', 201);
+    // Debug: Imprimir datos recibidos
+    console.log('🔍 DATOS RECIBIDOS EN CONTROLADOR:');
+    console.log('req.body:', JSON.stringify(req.body, null, 2));
+    console.log('req.user:', req.user);
+
+    // Validar que el usuario esté autenticado
+    if (!req.user || !req.user.usuario_id) {
+      return ApiResponse.error(res, 'Usuario no autenticado.', 401);
+    }
+
+    // Agregar usuario_id al body del request
+    const datosPedido = {
+      ...req.body,
+      pedido_usuario_id: req.user.usuario_id
+    };
+
+    console.log('📦 DATOS DEL PEDIDO PROCESADOS:', JSON.stringify(datosPedido, null, 2));
+
+    // Validar estructura básica antes de crear
+    if (!datosPedido.proveedor_id) {
+      return ApiResponse.error(res, 'proveedor_id es requerido.', 400);
+    }
+
+    if (!datosPedido.productos && !datosPedido.variantesBorrador && !datosPedido.productosBorrador) {
+      return ApiResponse.error(res, 'Debe incluir al menos un producto, variante borrador o producto borrador.', 400);
+    }
+
+    // Crear pedido con validaciones internas
+    console.log('📦 LLAMANDO A PedidoService.crearPedido...');
+    const pedido_id = await PedidoService.crearPedido(datosPedido);
+    console.log('✅ PEDIDO CREADO CON ID:', pedido_id);
+    return ApiResponse.success(res, { pedido_id }, 'Pedido creado exitosamente. Precios comparados y registrados en historial.', 201);
   } catch (error) {
+    console.error('❌ ERROR EN CREAR PEDIDO:', error);
+    console.error('Stack trace:', error.stack);
+    // Si es un error de validación, retornar 400
+    if (error.message && error.message.includes('Errores de validación')) {
+      return ApiResponse.error(res, error.message, 400);
+    }
     return ApiResponse.manejarErrorDB(error, res, 'crear pedido');
   }
 };

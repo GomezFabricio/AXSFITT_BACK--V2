@@ -62,7 +62,6 @@ class PedidoService {
       pedido_fecha_esperada_entrega
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     CREAR_DETALLE: `INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_id, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, ?, ?)`,
-    CREAR_DETALLE_SIN_REGISTRAR: `INSERT INTO pedidos_detalle (pd_pedido_id, pd_producto_sin_registrar, pd_cantidad_pedida, pd_precio_unitario) VALUES (?, ?, ?, ?)`,
     ACTUALIZAR_PEDIDO: (campos) => `UPDATE pedidos SET ${campos.join(', ')} WHERE pedido_id = ?`,
     ELIMINAR_PEDIDO: `UPDATE pedidos SET pedido_estado = 'cancelado' WHERE pedido_id = ?`,
     RECEPCIONAR_PEDIDO: `UPDATE pedidos SET pedido_estado = 'recibido', pedido_fecha_recepcion = ? WHERE pedido_id = ?`,
@@ -118,11 +117,26 @@ class PedidoService {
     `, [id]);
 
     // 6. Subtotal calculado (solo ítems registrados y borrador)
-    const subtotal = [...items, ...variantesBorrador, ...productosBorrador].reduce((acc, item) => {
-      const cantidad = item.pd_cantidad_pedida || item.vb_cantidad || item.pbp_cantidad || 0;
-      const precio = item.pd_precio_unitario || item.vb_precio_unitario || item.pbp_precio_unitario || 0;
+    const subtotal = [...items, ...variantesBorrador].reduce((acc, item) => {
+      const cantidad = item.pd_cantidad_pedida || item.vb_cantidad || 0;
+      const precio = item.pd_precio_unitario || item.vb_precio_unitario || 0;
       const subtotalItem = item.pd_subtotal || (precio * cantidad);
       return acc + Number(subtotalItem || 0);
+    }, 0) + 
+    // Calcular subtotal de productos borrador considerando variantes
+    productosBorrador.reduce((acc, pb) => {
+      // Si el producto tiene variantes, calcular basado en las variantes
+      if (pb.pbp_variantes && Array.isArray(pb.pbp_variantes) && pb.pbp_variantes.length > 0) {
+        const subtotalVariantes = pb.pbp_variantes.reduce((accVariantes, variante) => {
+          return accVariantes + ((Number(variante.precio) || 0) * (Number(variante.cantidad) || 0));
+        }, 0);
+        return acc + subtotalVariantes;
+      } else {
+        // Producto sin variantes, usar precio base
+        const cantidad = pb.pbp_cantidad || 0;
+        const precio = pb.pbp_precio_unitario || 0;
+        return acc + (precio * cantidad);
+      }
     }, 0);
 
     // 7. Calcular descuento como porcentaje
@@ -147,10 +161,214 @@ class PedidoService {
   }
 
   /**
+   * Validar estructura de datos enviados desde frontend
+   * @param {Object} data - Datos del pedido
+   */
+  async validarEstructuraDatos(data) {
+    const errores = [];
+    
+    // Validar proveedor
+    if (!data.proveedor_id) {
+      errores.push('proveedor_id es requerido');
+    } else {
+      const [proveedor] = await pool.query('SELECT proveedor_id FROM proveedores WHERE proveedor_id = ? AND proveedor_estado = "activo"', [data.proveedor_id]);
+      if (proveedor.length === 0) {
+        errores.push('Proveedor no existe o está inactivo');
+      }
+    }
+
+    // Validar productos registrados
+    if (data.productos && Array.isArray(data.productos)) {
+      for (let i = 0; i < data.productos.length; i++) {
+        const prod = data.productos[i];
+        if (!prod.producto_id) {
+          errores.push(`Producto ${i + 1}: producto_id es requerido`);
+        }
+        if (!prod.cantidad || prod.cantidad <= 0) {
+          errores.push(`Producto ${i + 1}: cantidad debe ser mayor a 0`);
+        }
+        if (prod.precio_costo !== undefined && (typeof prod.precio_costo !== 'number' || prod.precio_costo < 0)) {
+          errores.push(`Producto ${i + 1}: precio_costo debe ser un número positivo`);
+        }
+        
+        // Verificar que el producto existe
+        if (prod.producto_id) {
+          const [producto] = await pool.query('SELECT producto_id FROM productos WHERE producto_id = ?', [prod.producto_id]);
+          if (producto.length === 0) {
+            errores.push(`Producto ${i + 1}: producto_id ${prod.producto_id} no existe`);
+          }
+        }
+
+        // Verificar variante si existe
+        if (prod.variante_id) {
+          const [variante] = await pool.query('SELECT variante_id FROM variantes WHERE variante_id = ? AND producto_id = ?', [prod.variante_id, prod.producto_id]);
+          if (variante.length === 0) {
+            errores.push(`Producto ${i + 1}: variante_id ${prod.variante_id} no existe para el producto ${prod.producto_id}`);
+          }
+        }
+      }
+    }
+
+    // Validar variantes borrador
+    if (data.variantesBorrador && Array.isArray(data.variantesBorrador)) {
+      for (let i = 0; i < data.variantesBorrador.length; i++) {
+        const vb = data.variantesBorrador[i];
+        if (!vb.vb_producto_id) {
+          errores.push(`Variante borrador ${i + 1}: vb_producto_id es requerido`);
+        }
+        if (!vb.vb_cantidad || vb.vb_cantidad <= 0) {
+          errores.push(`Variante borrador ${i + 1}: vb_cantidad debe ser mayor a 0`);
+        }
+        if (!vb.vb_precio_unitario || vb.vb_precio_unitario < 0) {
+          errores.push(`Variante borrador ${i + 1}: vb_precio_unitario debe ser un número positivo`);
+        }
+        if (!vb.vb_atributos || !Array.isArray(vb.vb_atributos) || vb.vb_atributos.length === 0) {
+          errores.push(`Variante borrador ${i + 1}: vb_atributos debe ser un array no vacío`);
+        }
+      }
+    }
+
+    // Validar productos borrador
+    if (data.productosBorrador && Array.isArray(data.productosBorrador)) {
+      for (let i = 0; i < data.productosBorrador.length; i++) {
+        const pb = data.productosBorrador[i];
+        if (!pb.pbp_nombre || pb.pbp_nombre.trim() === '') {
+          errores.push(`Producto borrador ${i + 1}: pbp_nombre es requerido`);
+        }
+        
+        // Verificar si el producto tiene variantes
+        const tieneVariantes = pb.pbp_variantes && Array.isArray(pb.pbp_variantes) && pb.pbp_variantes.length > 0;
+        
+        if (tieneVariantes) {
+          // Para productos con variantes, validar que las variantes tengan datos válidos
+          let variantesValidas = true;
+          for (let j = 0; j < pb.pbp_variantes.length; j++) {
+            const variante = pb.pbp_variantes[j];
+            if (!variante.cantidad || variante.cantidad <= 0) {
+              errores.push(`Producto borrador ${i + 1}, variante ${j + 1}: cantidad debe ser mayor a 0`);
+              variantesValidas = false;
+            }
+            if (!variante.precio || variante.precio <= 0) {
+              errores.push(`Producto borrador ${i + 1}, variante ${j + 1}: precio debe ser mayor a 0`);
+              variantesValidas = false;
+            }
+          }
+          
+          // Para productos con variantes, la cantidad y precio base pueden ser 0
+          if (!variantesValidas) {
+            errores.push(`Producto borrador ${i + 1}: las variantes deben tener cantidad y precio válidos`);
+          }
+        } else {
+          // Para productos sin variantes, validar cantidad y precio base
+          if (!pb.pbp_cantidad || pb.pbp_cantidad <= 0) {
+            errores.push(`Producto borrador ${i + 1}: pbp_cantidad debe ser mayor a 0`);
+          }
+          if (!pb.pbp_precio_unitario || pb.pbp_precio_unitario <= 0) {
+            errores.push(`Producto borrador ${i + 1}: pbp_precio_unitario debe ser un número positivo`);
+          }
+        }
+      }
+    }
+
+    if (errores.length > 0) {
+      throw new Error(`Errores de validación: ${errores.join(', ')}`);
+    }
+
+    return true;
+  }
+
+  /**
+   * Comparar precios y registrar cambios en historial
+   * @param {Object} data - Datos del pedido
+   * @param {number} pedido_id - ID del pedido
+   * @param {number} usuario_id - ID del usuario
+   * @param {Object} conn - Conexión de base de datos
+   */
+  async compararYRegistrarPrecios(data, pedido_id, usuario_id, conn) {
+    try {
+      // Comparar precios de productos registrados
+      if (data.productos && Array.isArray(data.productos)) {
+        for (const prod of data.productos) {
+          if (prod.precio_costo !== undefined) {
+            let precioActual = null;
+            let producto_id = prod.producto_id;
+            let variante_id = prod.variante_id || null;
+
+            // Obtener precio actual
+            if (prod.variante_id) {
+              const [variante] = await conn.query('SELECT variante_precio_costo FROM variantes WHERE variante_id = ?', [prod.variante_id]);
+              if (variante.length > 0) {
+                precioActual = variante[0].variante_precio_costo;
+              }
+            } else {
+              const [producto] = await conn.query('SELECT producto_precio_costo FROM productos WHERE producto_id = ?', [prod.producto_id]);
+              if (producto.length > 0) {
+                precioActual = producto[0].producto_precio_costo;
+              }
+            }
+
+            // Si hay diferencia de precio, registrar en historial
+            if (precioActual !== null && precioActual !== prod.precio_costo) {
+              await conn.query(`
+                INSERT INTO precios_historicos (
+                  ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
+                  ph_motivo, ph_pedido_id, ph_usuario_id, ph_observaciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                producto_id,
+                variante_id,
+                precioActual,
+                prod.precio_costo,
+                'recepcion_pedido',
+                pedido_id,
+                usuario_id,
+                `Cambio de precio detectado en pedido. Precio anterior: $${precioActual}, Precio nuevo: $${prod.precio_costo}`
+              ]);
+
+              // Actualizar precio en la tabla correspondiente
+              if (prod.variante_id) {
+                await conn.query('UPDATE variantes SET variante_precio_costo = ? WHERE variante_id = ?', [prod.precio_costo, prod.variante_id]);
+              } else {
+                await conn.query('UPDATE productos SET producto_precio_costo = ? WHERE producto_id = ?', [prod.precio_costo, prod.producto_id]);
+              }
+            }
+          }
+        }
+      }
+
+      // Registrar precios de variantes borrador para futuro seguimiento
+      // NOTA: No registramos en precios_historicos para variantes borrador
+      // hasta que se conviertan en variantes oficiales, ya que ph_variante_id no puede ser NULL
+      if (data.variantesBorrador && Array.isArray(data.variantesBorrador)) {
+        console.log('📝 Variantes borrador no se registran en precios_historicos hasta ser variantes oficiales');
+        // for (const vb of data.variantesBorrador) {
+        //   Commented out: Will be handled when variant becomes official
+        // }
+      }
+
+      // Registrar precios iniciales de productos borrador
+      // NOTA: No registramos en precios_historicos para productos borrador
+      // hasta que se conviertan en productos oficiales, ya que ph_producto_id no puede ser NULL
+      if (data.productosBorrador && Array.isArray(data.productosBorrador)) {
+        console.log('📝 Productos borrador no se registran en precios_historicos hasta ser productos oficiales');
+        // for (const pb of data.productosBorrador) {
+        //   Commented out: Will be handled when product becomes official
+        // }
+      }
+
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
    * Crea un nuevo pedido y sus detalles
    * @param {Object} data - { proveedor_id, productos: [{producto_id, cantidad, precio_costo}], productosSinRegistrar: [{nombre, cantidad, precio_costo}] }
    */
   async crearPedido(data) {
+    // Validar estructura de datos
+    await this.validarEstructuraDatos(data);
+
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -166,26 +384,43 @@ class PedidoService {
         fecha_esperada_entrega = null,
         total = null
       } = data;
-      // Guardar variantes en borrador
-      for (const vb of variantesBorrador) {
-        await conn.query(
-          'INSERT INTO variantes_borrador (vb_pedido_id, vb_producto_id, vb_atributos, vb_cantidad, vb_precio_unitario, vb_estado) VALUES (?, ?, ?, ?, ?, ?)',
-          [pedido_id, vb.vb_producto_id, JSON.stringify(vb.vb_atributos), vb.vb_cantidad, vb.vb_precio_unitario, 'borrador']
-        );
-      }
-      // Guardar productos en borrador
-      for (const pb of productosBorrador) {
-        await conn.query(
-          'INSERT INTO pedidos_borrador_producto (pbp_pedido_id, pbp_nombre, pbp_cantidad, pbp_precio_unitario, pbp_estado) VALUES (?, ?, ?, ?, ?)',
-          [pedido_id, pb.pbp_nombre, pb.pbp_cantidad, pb.pbp_precio_unitario, 'borrador']
-        );
-      }
+
       const fechaPedido = new Date();
       // Calcular total si no viene
       let pedido_total = total;
       if (pedido_total === null) {
-        pedido_total = productos.reduce((acc, p) => acc + ((Number(p.precio_costo) || 0) * (Number(p.cantidad) || 1)), 0);
-        pedido_total = Math.max(0, pedido_total - (Number(descuento) || 0)) + (Number(costo_envio) || 0);
+        // Productos registrados
+        let subtotal = productos.reduce((acc, p) => acc + ((Number(p.precio_costo) || 0) * (Number(p.cantidad) || 1)), 0);
+        
+        // Productos sin registrar (legacy)
+        subtotal += productosSinRegistrar.reduce((acc, p) => acc + ((Number(p.precio_costo) || 0) * (Number(p.cantidad) || 1)), 0);
+        
+        // Variantes borrador
+        subtotal += variantesBorrador.reduce((acc, vb) => acc + ((Number(vb.vb_precio_unitario) || 0) * (Number(vb.vb_cantidad) || 1)), 0);
+        
+        // Productos borrador
+        subtotal += productosBorrador.reduce((acc, pb) => {
+          // Si el producto tiene variantes, calcular el subtotal basado en las variantes
+          if (pb.pbp_variantes && Array.isArray(pb.pbp_variantes) && pb.pbp_variantes.length > 0) {
+            const subtotalVariantes = pb.pbp_variantes.reduce((accVariantes, variante) => {
+              return accVariantes + ((Number(variante.precio) || 0) * (Number(variante.cantidad) || 0));
+            }, 0);
+            console.log(`📊 Producto con variantes "${pb.pbp_nombre}": subtotal = ${subtotalVariantes}`);
+            return acc + subtotalVariantes;
+          } else {
+            // Producto sin variantes, usar precio base
+            const subtotalBase = (Number(pb.pbp_precio_unitario) || 0) * (Number(pb.pbp_cantidad) || 1);
+            console.log(`📊 Producto sin variantes "${pb.pbp_nombre}": subtotal = ${subtotalBase}`);
+            return acc + subtotalBase;
+          }
+        }, 0);
+        
+        // Agregar costo de envío al subtotal antes del descuento
+        const subtotalConEnvio = subtotal + (Number(costo_envio) || 0);
+        
+        // Aplicar descuento al subtotal + envío
+        const descuentoMonto = subtotalConEnvio * (Number(descuento) / 100);
+        pedido_total = Math.max(0, subtotalConEnvio - descuentoMonto);
       }
       const [pedidoRes] = await conn.query(
         PedidoService.QUERIES.CREAR_PEDIDO,
@@ -201,6 +436,44 @@ class PedidoService {
         ]
       );
       const pedido_id = pedidoRes.insertId;
+
+      // Guardar variantes en borrador
+      console.log('🔍 VARIANTES BORRADOR RECIBIDAS:', JSON.stringify(variantesBorrador, null, 2));
+      for (const vb of variantesBorrador) {
+        console.log('📝 Insertando variante borrador:', vb);
+        await conn.query(
+          'INSERT INTO variantes_borrador (vb_pedido_id, vb_producto_id, vb_atributos, vb_cantidad, vb_precio_unitario, vb_estado) VALUES (?, ?, ?, ?, ?, ?)',
+          [pedido_id, vb.vb_producto_id, JSON.stringify(vb.vb_atributos), vb.vb_cantidad, vb.vb_precio_unitario, 'borrador']
+        );
+        console.log('✅ Variante borrador insertada');
+      }
+
+      // Guardar productos en borrador
+      console.log('🔍 PRODUCTOS BORRADOR RECIBIDOS:', JSON.stringify(productosBorrador, null, 2));
+      for (const pb of productosBorrador) {
+        console.log('📝 Insertando producto borrador:', pb);
+        
+        // Calcular precio unitario y cantidad para productos con variantes
+        let cantidadTotal = pb.pbp_cantidad || 0;
+        let precioUnitario = pb.pbp_precio_unitario || 0;
+        
+        if (pb.pbp_variantes && Array.isArray(pb.pbp_variantes) && pb.pbp_variantes.length > 0) {
+          // Para productos con variantes, calcular totales
+          cantidadTotal = pb.pbp_variantes.reduce((acc, variante) => acc + (Number(variante.cantidad) || 0), 0);
+          const subtotalVariantes = pb.pbp_variantes.reduce((acc, variante) => {
+            return acc + ((Number(variante.precio) || 0) * (Number(variante.cantidad) || 0));
+          }, 0);
+          precioUnitario = cantidadTotal > 0 ? (subtotalVariantes / cantidadTotal) : 0;
+          console.log(`📊 Producto con variantes "${pb.pbp_nombre}": cantidad total = ${cantidadTotal}, precio promedio = ${precioUnitario}`);
+        }
+        
+        await conn.query(
+          'INSERT INTO pedidos_borrador_producto (pbp_pedido_id, pbp_nombre, pbp_atributos, pbp_variantes, pbp_cantidad, pbp_precio_unitario, pbp_estado) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [pedido_id, pb.pbp_nombre, JSON.stringify(pb.pbp_atributos || null), JSON.stringify(pb.pbp_variantes || null), cantidadTotal, precioUnitario, 'borrador']
+        );
+        console.log('✅ Producto borrador insertado');
+      }
+
       // Detalles productos registrados
       for (const prod of productos) {
         if (prod.variante_id) {
@@ -217,10 +490,62 @@ class PedidoService {
           );
         }
       }
-      // Detalles productos sin registrar
+
+      // Detalles productos sin registrar (legacy) - convertir a productos borrador
+      console.log('🔍 PROCESANDO PRODUCTOS SIN REGISTRAR:', JSON.stringify(productosSinRegistrar, null, 2));
+      
+      // Crear un Set con los nombres de productos que ya están en productosBorrador
+      const productosYaEnBorrador = new Set(productosBorrador.map(pb => pb.pbp_nombre));
+      
       for (const prod of productosSinRegistrar) {
-        await conn.query(PedidoService.QUERIES.CREAR_DETALLE_SIN_REGISTRAR, [pedido_id, prod.nombre, prod.cantidad, prod.precio_costo]);
+        console.log('📝 Analizando producto sin registrar:', prod);
+        
+        // Mejorar el parsing de cantidad y precio
+        const cantidad = prod.cantidad && prod.cantidad !== '' ? Number(prod.cantidad) : 0;
+        const precio = prod.precio_costo && prod.precio_costo !== '' ? Number(prod.precio_costo) : 0;
+        
+        console.log(`   - Nombre: "${prod.nombre}"`);
+        console.log(`   - Cantidad original: "${prod.cantidad}" -> parseada: ${cantidad}`);
+        console.log(`   - Precio original: "${prod.precio_costo}" -> parseado: ${precio}`);
+        
+        // Si el producto tiene nombre, verificar si no está ya en productosBorrador
+        if (prod.nombre && prod.nombre.trim() !== '') {
+          if (productosYaEnBorrador.has(prod.nombre)) {
+            console.log('📋 Producto ya está en productosBorrador, omitiendo duplicado:', prod.nombre);
+            continue;
+          }
+          
+          if (cantidad > 0 && precio > 0) {
+            // Producto con datos completos
+            await conn.query(
+              'INSERT INTO pedidos_borrador_producto (pbp_pedido_id, pbp_nombre, pbp_atributos, pbp_variantes, pbp_cantidad, pbp_precio_unitario, pbp_estado) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              [
+                pedido_id, 
+                prod.nombre, 
+                JSON.stringify(prod.atributosConfigurados || null), 
+                JSON.stringify([]), 
+                cantidad, 
+                precio, 
+                'borrador'
+              ]
+            );
+            console.log('✅ Producto sin registrar insertado como producto borrador:', prod.nombre);
+          } else if (prod.atributosConfigurados && prod.atributosConfigurados.atributos && prod.atributosConfigurados.atributos.length > 0) {
+            // Producto con atributos configurados pero sin cantidad/precio base
+            // Solo guardarlo si no viene en productosBorrador con variantes
+            console.log('📋 Producto con atributos configurados sin datos base, verificando si tiene variantes en productosBorrador');
+            console.log('   - Este producto se manejará por variantes o ya está en productosBorrador');
+          } else {
+            console.log('⚠️ Producto sin registrar ignorado por no tener datos válidos:', prod.nombre);
+          }
+        } else {
+          console.log('⚠️ Producto sin registrar ignorado por no tener nombre válido:', prod);
+        }
       }
+
+      // Comparar y registrar cambios de precios
+      await this.compararYRegistrarPrecios(data, pedido_id, pedido_usuario_id, conn);
+
       await conn.commit();
       return pedido_id;
     } catch (err) {
@@ -248,6 +573,7 @@ class PedidoService {
 
   /**
    * Recepcionar pedido: actualiza cantidades recibidas, precios, stock y movimientos
+   * MEJORADO: Incluye comparación de precios durante la recepción
    * @param {number} pedido_id
    * @param {Array} recepcion - [{detalle_id, cantidad_recibida, precio_costo_nuevo}]
    * @param {number} usuario_id
@@ -256,77 +582,105 @@ class PedidoService {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+
       // Actualizar estado pedido
-      await conn.query(PedidoService.QUERIES.RECEPCIONAR_PEDIDO, [new Date(), pedido_id]);
-      // Actualizar detalles y stock
+      await conn.query('UPDATE pedidos SET pedido_estado = ?, pedido_fecha_entrega_real = ? WHERE pedido_id = ?', 
+        ['recibido', new Date(), pedido_id]);
+
+      // Actualizar detalles, stock y registrar cambios de precios
       for (const item of recepcion) {
-        // Actualizar detalle
-        await conn.query('UPDATE pedidos_detalle SET cantidad_recibida = ?, precio_costo_recibido = ? WHERE detalle_id = ?', [item.cantidad_recibida, item.precio_costo_nuevo, item.detalle_id]);
-        // Actualizar stock y movimientos
-        await conn.query('UPDATE stock SET cantidad = cantidad + ? WHERE producto_id = ?', [item.cantidad_recibida, item.producto_id]);
-        await conn.query('INSERT INTO stock_movimientos (producto_id, cantidad, tipo, fecha, referencia) VALUES (?, ?, ?, ?, ?)', [item.producto_id, item.cantidad_recibida, 'ingreso', new Date(), `Pedido ${pedido_id}`]);
-        // Registrar precio histórico si cambió
-        if (item.precio_costo_nuevo) {
-          await conn.query('INSERT INTO precios_historicos (producto_id, precio, fecha, referencia) VALUES (?, ?, ?, ?)', [item.producto_id, item.precio_costo_nuevo, new Date(), `Pedido ${pedido_id}`]);
+        // Obtener información del detalle
+        const [detalle] = await conn.query(
+          'SELECT pd.*, p.producto_precio_costo, v.variante_precio_costo FROM pedidos_detalle pd LEFT JOIN productos p ON pd.pd_producto_id = p.producto_id LEFT JOIN variantes v ON pd.pd_variante_id = v.variante_id WHERE pd.pd_id = ?', 
+          [item.detalle_id]
+        );
+
+        if (detalle.length === 0) continue;
+
+        const det = detalle[0];
+        const producto_id = det.pd_producto_id;
+        const variante_id = det.pd_variante_id;
+
+        // Actualizar detalle del pedido
+        await conn.query(
+          'UPDATE pedidos_detalle SET pd_cantidad_recibida = ?, pd_precio_unitario = ? WHERE pd_id = ?', 
+          [item.cantidad_recibida, item.precio_costo_nuevo || det.pd_precio_unitario, item.detalle_id]
+        );
+
+        // Actualizar stock y crear movimiento
+        if (producto_id || variante_id) {
+          // Actualizar stock
+          if (variante_id) {
+            await conn.query(
+              'INSERT INTO stock (variante_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?', 
+              [variante_id, item.cantidad_recibida, item.cantidad_recibida]
+            );
+          } else {
+            await conn.query(
+              'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?', 
+              [producto_id, item.cantidad_recibida, item.cantidad_recibida]
+            );
+          }
+
+          // Crear movimiento de stock
+          await conn.query(
+            'INSERT INTO stock_movimientos (sm_producto_id, sm_variante_id, sm_tipo_movimiento, sm_cantidad, sm_motivo, sm_pedido_id, sm_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+            [producto_id, variante_id, 'entrada', item.cantidad_recibida, `Recepción pedido ${pedido_id}`, pedido_id, usuario_id]
+          );
+
+          // Comparar y registrar cambios de precios
+          if (item.precio_costo_nuevo) {
+            let precioActual = null;
+            if (variante_id) {
+              precioActual = det.variante_precio_costo;
+            } else {
+              precioActual = det.producto_precio_costo;
+            }
+
+            // Si hay cambio de precio, registrarlo
+            if (precioActual !== null && precioActual !== item.precio_costo_nuevo) {
+              await conn.query(`
+                INSERT INTO precios_historicos (
+                  ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
+                  ph_motivo, ph_pedido_id, ph_usuario_id, ph_observaciones
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                producto_id,
+                variante_id,
+                precioActual,
+                item.precio_costo_nuevo,
+                'recepcion_pedido',
+                pedido_id,
+                usuario_id,
+                `Actualización de precio durante recepción. Cantidad recibida: ${item.cantidad_recibida}`
+              ]);
+
+              // Actualizar precio en la tabla correspondiente
+              if (variante_id) {
+                await conn.query('UPDATE variantes SET variante_precio_costo = ? WHERE variante_id = ?', 
+                  [item.precio_costo_nuevo, variante_id]);
+              } else {
+                await conn.query('UPDATE productos SET producto_precio_costo = ? WHERE producto_id = ?', 
+                  [item.precio_costo_nuevo, producto_id]);
+              }
+            }
+          }
         }
       }
 
-      // 1. Migrar variantes en borrador a tablas oficiales
-      const [variantesBorrador] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
-      for (const vb of variantesBorrador) {
-        // 1.1. Si el producto ya tiene atributos, usar los existentes. Si no, crear los atributos.
-        let atributoIds = {};
-        if (vb.vb_atributos && Array.isArray(vb.vb_atributos)) {
-          for (const attr of vb.vb_atributos) {
-            // Buscar o crear atributo
-            let [rows] = await conn.query('SELECT atributo_id FROM atributos WHERE atributo_nombre = ? AND producto_id = ?', [attr.nombre, vb.vb_producto_id]);
-            let atributo_id;
-            if (rows.length > 0) {
-              atributo_id = rows[0].atributo_id;
-            } else {
-              let res = await conn.query('INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)', [vb.vb_producto_id, attr.nombre]);
-              atributo_id = res[0].insertId;
-            }
-            atributoIds[attr.nombre] = atributo_id;
-          }
-        }
-        // 1.2. Crear variante inactiva
-        let resVar = await conn.query('INSERT INTO variantes (producto_id, variante_estado, variante_precio_costo) VALUES (?, ?, ?)', [vb.vb_producto_id, 'inactivo', vb.vb_precio_unitario]);
-        let variante_id = resVar[0].insertId;
-        // 1.3. Crear valores de variante
-        if (vb.vb_atributos && Array.isArray(vb.vb_atributos)) {
-          for (const attr of vb.vb_atributos) {
-            let atributo_id = atributoIds[attr.nombre];
-            // Buscar o crear valor
-            let [valRows] = await conn.query('SELECT valor_id FROM valores_variantes WHERE atributo_id = ? AND valor_nombre = ?', [atributo_id, attr.valor]);
-            let valor_id;
-            if (valRows.length > 0) {
-              valor_id = valRows[0].valor_id;
-            } else {
-              let res = await conn.query('INSERT INTO valores_variantes (atributo_id, valor_nombre) VALUES (?, ?)', [atributo_id, attr.valor]);
-              valor_id = res[0].insertId;
-            }
-            // Asociar valor a variante
-            await conn.query('INSERT INTO variante_valor (variante_id, valor_id) VALUES (?, ?)', [variante_id, valor_id]);
-          }
-        }
-      }
-      // Eliminar variantes borrador migradas
-      await conn.query('DELETE FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+      // Migrar variantes borrador a tablas oficiales
+      await this.migrarVariantesBorrador(pedido_id, usuario_id, conn);
 
-      // 2. Migrar productos borrador a tabla oficial de productos (inactivos)
-      const [productosBorrador] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
-      for (const pb of productosBorrador) {
-        // Crear producto inactivo
-        let resProd = await conn.query('INSERT INTO productos (producto_nombre, producto_estado) VALUES (?, ?)', [pb.pbp_nombre, 'inactivo']);
-        let producto_id = resProd[0].insertId;
-        // Si tiene variantes asociadas, migrarlas (no implementado aquí, requiere lógica adicional si se usan variantes en productos borrador)
-      }
-      // Eliminar productos borrador migrados
-      await conn.query('DELETE FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+      // Migrar productos borrador a tabla oficial de productos
+      await this.migrarProductosBorrador(pedido_id, usuario_id, conn);
 
       // Registrar modificación
-      await conn.query(PedidoService.QUERIES.CREAR_MODIFICACION, [pedido_id, usuario_id, 'Recepción de pedido', new Date()]);
+      await conn.query(
+        'INSERT INTO pedidos_modificaciones (pm_pedido_id, pm_usuario_id, pm_motivo, pm_detalle_anterior, pm_detalle_nuevo) VALUES (?, ?, ?, ?, ?)',
+        [pedido_id, usuario_id, 'Recepción de pedido con actualización de precios', 
+         JSON.stringify({ estado: 'pendiente' }), JSON.stringify({ estado: 'recibido', fecha_recepcion: new Date() })]
+      );
+
       await conn.commit();
       return true;
     } catch (err) {
@@ -334,6 +688,124 @@ class PedidoService {
       throw err;
     } finally {
       conn.release();
+    }
+  }
+
+  /**
+   * Migrar variantes borrador a tablas oficiales
+   * @param {number} pedido_id
+   * @param {number} usuario_id  
+   * @param {Object} conn
+   */
+  async migrarVariantesBorrador(pedido_id, usuario_id, conn) {
+    const [variantesBorrador] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+    
+    for (const vb of variantesBorrador) {
+      // Parsear atributos
+      let atributos = vb.vb_atributos;
+      if (typeof atributos === 'string') {
+        try {
+          atributos = JSON.parse(atributos);
+        } catch (e) {
+          atributos = [];
+        }
+      }
+
+      // Obtener o crear atributos del producto
+      let atributoIds = {};
+      if (Array.isArray(atributos)) {
+        for (const attr of atributos) {
+          let [rows] = await conn.query('SELECT atributo_id FROM atributos WHERE atributo_nombre = ? AND producto_id = ?', 
+            [attr.atributo_nombre, vb.vb_producto_id]);
+          
+          let atributo_id;
+          if (rows.length > 0) {
+            atributo_id = rows[0].atributo_id;
+          } else {
+            let res = await conn.query('INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)', 
+              [vb.vb_producto_id, attr.atributo_nombre]);
+            atributo_id = res[0].insertId;
+          }
+          atributoIds[attr.atributo_nombre] = atributo_id;
+        }
+      }
+
+      // Crear variante oficial (inicialmente inactiva)
+      let resVar = await conn.query(
+        'INSERT INTO variantes (producto_id, variante_estado, variante_precio_costo) VALUES (?, ?, ?)', 
+        [vb.vb_producto_id, 'inactivo', vb.vb_precio_unitario]
+      );
+      let variante_id = resVar[0].insertId;
+
+      // Crear valores de variante
+      if (Array.isArray(atributos)) {
+        for (const attr of atributos) {
+          let atributo_id = atributoIds[attr.atributo_nombre];
+          await conn.query(
+            'INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)',
+            [variante_id, atributo_id, attr.valor_nombre]
+          );
+        }
+      }
+
+      // Registrar en historial de precios
+      await conn.query(`
+        INSERT INTO precios_historicos (
+          ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
+          ph_motivo, ph_pedido_id, ph_usuario_id, ph_observaciones
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        vb.vb_producto_id,
+        variante_id,
+        null,
+        vb.vb_precio_unitario,
+        'recepcion_pedido',
+        pedido_id,
+        usuario_id,
+        `Migración de variante borrador a variante oficial. Atributos: ${JSON.stringify(atributos)}`
+      ]);
+
+      // Marcar variante borrador como migrada
+      await conn.query('UPDATE variantes_borrador SET vb_estado = ? WHERE vb_id = ?', ['registrado', vb.vb_id]);
+    }
+  }
+
+  /**
+   * Migrar productos borrador a tabla oficial
+   * @param {number} pedido_id
+   * @param {number} usuario_id
+   * @param {Object} conn
+   */
+  async migrarProductosBorrador(pedido_id, usuario_id, conn) {
+    const [productosBorrador] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+    
+    for (const pb of productosBorrador) {
+      // Crear producto oficial (inicialmente inactivo)
+      let resProd = await conn.query(
+        'INSERT INTO productos (producto_nombre, producto_estado, producto_precio_costo) VALUES (?, ?, ?)', 
+        [pb.pbp_nombre, 'inactivo', pb.pbp_precio_unitario]
+      );
+      let producto_id = resProd[0].insertId;
+
+      // Registrar precio inicial en historial
+      await conn.query(`
+        INSERT INTO precios_historicos (
+          ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
+          ph_motivo, ph_pedido_id, ph_usuario_id, ph_observaciones
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        producto_id,
+        null,
+        null,
+        pb.pbp_precio_unitario,
+        'recepcion_pedido',
+        pedido_id,
+        usuario_id,
+        `Migración de producto borrador a producto oficial: ${pb.pbp_nombre}`
+      ]);
+
+      // Marcar producto borrador como migrado
+      await conn.query('UPDATE pedidos_borrador_producto SET pbp_estado = ? WHERE pbp_id = ?', ['registrado', pb.pbp_id]);
     }
   }
 

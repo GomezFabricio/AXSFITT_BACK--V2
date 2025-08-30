@@ -37,6 +37,21 @@ router.post(
   crearPedido
 );
 
+// Endpoint de debug para ver qué datos llegan
+router.post(
+  '/debug',
+  authenticate,
+  validarPermisos('Crear Pedido'),
+  (req, res) => {
+    console.log('=== DEBUG DATOS RECIBIDOS ===');
+    console.log('Body completo:', JSON.stringify(req.body, null, 2));
+    console.log('variantesBorrador:', req.body.variantesBorrador);
+    console.log('productosBorrador:', req.body.productosBorrador);
+    console.log('==============================');
+    res.json({ success: true, message: 'Datos recibidos y logueados', data: req.body });
+  }
+);
+
 // Precargar producto sin registrar
 router.post(
   '/precargar-producto',
