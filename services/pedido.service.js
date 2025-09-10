@@ -115,6 +115,23 @@ class PedidoService {
     const [productosBorrador] = await pool.query(`
       SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?
     `, [id]);
+    
+    // Parsear atributos y variantes JSON si corresponde
+    productosBorrador.forEach(pb => {
+      try {
+        // Parsear atributos JSON
+        if (pb.pbp_atributos && typeof pb.pbp_atributos === 'string') {
+          pb.pbp_atributos = JSON.parse(pb.pbp_atributos);
+        }
+        // Parsear variantes JSON
+        if (pb.pbp_variantes && typeof pb.pbp_variantes === 'string') {
+          pb.pbp_variantes = JSON.parse(pb.pbp_variantes);
+        }
+      } catch (e) {
+        console.warn('Error al parsear JSON en productos borrador:', e);
+        // Si falla el parseo, mantener los valores originales
+      }
+    });
 
     // 6. Subtotal calculado (solo ítems registrados y borrador)
     const subtotal = [...items, ...variantesBorrador].reduce((acc, item) => {
@@ -133,8 +150,8 @@ class PedidoService {
         return acc + subtotalVariantes;
       } else {
         // Producto sin variantes, usar precio base
-        const cantidad = pb.pbp_cantidad || 0;
-        const precio = pb.pbp_precio_unitario || 0;
+        const cantidad = Number(pb.pbp_cantidad) || 0;
+        const precio = Number(pb.pbp_precio_unitario) || 0;
         return acc + (precio * cantidad);
       }
     }, 0);
