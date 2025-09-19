@@ -1,20 +1,4 @@
--- ============================================
--- VARIANTES EN BORRADOR (para productos existentes)
--- ============================================
 
-CREATE TABLE variantes_borrador (
-  vb_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  vb_pedido_id INT UNSIGNED NOT NULL,
-  vb_producto_id INT UNSIGNED NOT NULL,
-  vb_atributos JSON NOT NULL,
-  vb_cantidad INT UNSIGNED NOT NULL DEFAULT 1,
-  vb_precio_unitario DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-  vb_estado ENUM('borrador','registrado') DEFAULT 'borrador',
-  vb_fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (vb_id),
-  FOREIGN KEY (vb_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
-  FOREIGN KEY (vb_producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE
-);
 -- ============================================
 -- GESTIÓN DE USUARIOS Y PERMISOS
 -- ============================================
@@ -560,3 +544,20 @@ CREATE TABLE envios_invitados (
   FOREIGN KEY(venta_id) REFERENCES ventas(venta_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
+-- ============================================
+-- VARIANTES EN BORRADOR (para productos existentes)
+-- ============================================
+
+CREATE TABLE variantes_borrador (
+  vb_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  vb_pedido_id INT UNSIGNED NOT NULL,
+  vb_producto_id INT UNSIGNED NOT NULL,
+  vb_atributos JSON NOT NULL,
+  vb_cantidad INT UNSIGNED NOT NULL DEFAULT 1,
+  vb_precio_unitario DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  vb_estado ENUM('borrador','registrado') DEFAULT 'borrador',
+  vb_fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (vb_id),
+  FOREIGN KEY (vb_pedido_id) REFERENCES pedidos(pedido_id) ON DELETE CASCADE ON UPDATE CASCADE,
+  FOREIGN KEY (vb_producto_id) REFERENCES productos(producto_id) ON DELETE CASCADE ON UPDATE CASCADE
+);
