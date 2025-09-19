@@ -114,12 +114,81 @@ export const cancelarPedido = async (req, res) => {
 // Modificar pedido (actualización y registro en historial)
 export const modificarPedido = async (req, res) => {
   try {
-    const { pedido_id, modificaciones, usuario_id } = req.body;
-    // Validar datos
-    // TODO: usar Validador.validarModificacionPedido si existe
-    await PedidoService.modificarPedido(pedido_id, modificaciones, usuario_id);
+    const { pedido_id, modificaciones, motivo } = req.body;
+    
+    // Validar datos requeridos
+    if (!pedido_id) {
+      return ApiResponse.error(res, 'pedido_id es requerido.', 400);
+    }
+    
+    if (!modificaciones || Object.keys(modificaciones).length === 0) {
+      return ApiResponse.error(res, 'No se especificaron modificaciones.', 400);
+    }
+    
+    if (!motivo || !motivo.trim()) {
+      return ApiResponse.error(res, 'El motivo de la modificación es requerido.', 400);
+    }
+
+    // Validar que el usuario esté autenticado
+    if (!req.user || !req.user.usuario_id) {
+      return ApiResponse.error(res, 'Usuario no autenticado.', 401);
+    }
+
+    await PedidoService.modificarPedido(pedido_id, modificaciones, req.user.usuario_id, motivo.trim());
     return ApiResponse.success(res, null, 'Pedido modificado y registrado en historial.');
   } catch (error) {
+    if (error.message.includes('no encontrado') || error.message.includes('estado pendiente')) {
+      return ApiResponse.error(res, error.message, 400);
+    }
     return ApiResponse.manejarErrorDB(error, res, 'modificar pedido');
+  }
+};
+
+// Modificar pedido completo con productos, variantes y productos borrador
+export const modificarPedidoCompleto = async (req, res) => {
+  try {
+    const { pedido_id, modificaciones, motivo } = req.body;
+    
+    // Validar datos requeridos
+    if (!pedido_id) {
+      return ApiResponse.error(res, 'pedido_id es requerido.', 400);
+    }
+    
+    if (!modificaciones || Object.keys(modificaciones).length === 0) {
+      return ApiResponse.error(res, 'No se especificaron modificaciones.', 400);
+    }
+    
+    if (!motivo || !motivo.trim()) {
+      return ApiResponse.error(res, 'El motivo de la modificación es requerido.', 400);
+    }
+
+    // Validar que el usuario esté autenticado
+    if (!req.user || !req.user.usuario_id) {
+      return ApiResponse.error(res, 'Usuario no autenticado.', 401);
+    }
+
+    const resultado = await PedidoService.modificarPedidoCompleto(pedido_id, modificaciones, req.user.usuario_id, motivo.trim());
+    return ApiResponse.success(res, resultado, 'Pedido modificado completamente y registrado en historial.');
+  } catch (error) {
+    if (error.message.includes('no encontrado') || error.message.includes('estado pendiente')) {
+      return ApiResponse.error(res, error.message, 400);
+    }
+    return ApiResponse.manejarErrorDB(error, res, 'modificar pedido completo');
+  }
+};
+
+// Obtener historial de modificaciones
+export const obtenerHistorialModificaciones = async (req, res) => {
+  try {
+    const { pedido_id } = req.params;
+    
+    if (!pedido_id) {
+      return ApiResponse.error(res, 'pedido_id es requerido.', 400);
+    }
+
+    const historial = await PedidoService.obtenerHistorialModificaciones(pedido_id);
+    return ApiResponse.success(res, historial, 'Historial obtenido exitosamente');
+  } catch (error) {
+    return ApiResponse.manejarErrorDB(error, res, 'obtener historial de modificaciones');
   }
 };

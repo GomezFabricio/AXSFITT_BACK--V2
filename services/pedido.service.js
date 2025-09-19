@@ -868,36 +868,317 @@ class PedidoService {
    * @param {object} modificaciones - campos a modificar (ej: {pedido_estado, pedido_total, ...})
    * @param {number} usuario_id
    */
-  async modificarPedido(pedido_id, modificaciones, usuario_id) {
+  /**
+   * Modificar pedido y registrar en historial
+   * @param {number} pedido_id
+   * @param {Object} modificaciones
+   * @param {number} usuario_id
+   * @param {string} motivo
+   */
+  async modificarPedido(pedido_id, modificaciones, usuario_id, motivo = 'Modificación de pedido') {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      
+      // Validar que el pedido existe y está en estado pendiente
+      const [pedidoExistente] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      if (!pedidoExistente.length) {
+        throw new Error('Pedido no encontrado');
+      }
+      
+      if (pedidoExistente[0].pedido_estado !== 'pendiente') {
+        throw new Error('Solo se pueden modificar pedidos en estado pendiente');
+      }
+
       // Obtener detalle anterior
-      const [pedidoAnt] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      const pedidoAnterior = pedidoExistente[0];
+      
       // Actualizar pedido
-      const campos = Object.keys(modificaciones).map(c => `${c} = ?`).join(', ');
+      const campos = Object.keys(modificaciones).map(c => `${c} = ?`);
       const valores = Object.values(modificaciones);
-      await conn.query(`UPDATE pedidos SET ${campos} WHERE pedido_id = ?`, [...valores, pedido_id]);
+      
+      if (campos.length > 0) {
+        await conn.query(
+          `UPDATE pedidos SET ${campos.join(', ')} WHERE pedido_id = ?`, 
+          [...valores, pedido_id]
+        );
+      }
+      
       // Obtener detalle nuevo
       const [pedidoNuevo] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
-      // Registrar modificación
+      
+      // Registrar modificación en historial
       await conn.query(
         `INSERT INTO pedidos_modificaciones (pm_pedido_id, pm_usuario_id, pm_motivo, pm_detalle_anterior, pm_detalle_nuevo) VALUES (?, ?, ?, ?, ?)`,
         [
           pedido_id,
           usuario_id,
-          'Modificación de pedido',
-          JSON.stringify(pedidoAnt[0] || {}),
-          JSON.stringify(pedidoNuevo[0] || {})
+          motivo,
+          JSON.stringify(pedidoAnterior),
+          JSON.stringify(pedidoNuevo[0])
         ]
       );
+      
       await conn.commit();
-      return true;
+      return { success: true, message: 'Pedido modificado exitosamente' };
     } catch (err) {
       await conn.rollback();
       throw err;
     } finally {
       conn.release();
+    }
+  }
+
+  /**
+   * Obtener historial de modificaciones de un pedido
+   * @param {number} pedido_id
+   */
+  async obtenerHistorialModificaciones(pedido_id) {
+    try {
+      const [historial] = await pool.query(`
+        SELECT pm.*, p.persona_nombre, p.persona_apellido
+        FROM pedidos_modificaciones pm
+        LEFT JOIN usuarios u ON pm.pm_usuario_id = u.usuario_id
+        LEFT JOIN personas p ON u.persona_id = p.persona_id
+        WHERE pm.pm_pedido_id = ?
+        ORDER BY pm.pm_fecha_modificacion DESC
+      `, [pedido_id]);
+      
+      return historial.map(registro => ({
+        ...registro,
+        pm_detalle_anterior: JSON.parse(registro.pm_detalle_anterior || '{}'),
+        pm_detalle_nuevo: JSON.parse(registro.pm_detalle_nuevo || '{}'),
+        usuario_nombre: `${registro.persona_nombre || ''} ${registro.persona_apellido || ''}`.trim() || 'Usuario desconocido'
+      }));
+    } catch (err) {
+      console.error('Error al obtener historial de modificaciones:', err);
+      throw err;
+    }
+  }
+
+  /**
+   * Modificar pedido completo con productos, variantes y productos borrador
+   * @param {number} pedido_id
+   * @param {object} modificaciones - Incluye datos del pedido, productos, variantes borrador, productos borrador
+   * @param {number} usuario_id
+   * @param {string} motivo
+   */
+  async modificarPedidoCompleto(pedido_id, modificaciones, usuario_id, motivo) {
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      
+      // Validar que el pedido existe y está en estado pendiente
+      const [pedidoExistente] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      if (!pedidoExistente.length) {
+        throw new Error('Pedido no encontrado');
+      }
+      
+      if (pedidoExistente[0].pedido_estado !== 'pendiente') {
+        throw new Error('Solo se pueden modificar pedidos en estado pendiente');
+      }
+
+      // Obtener detalle completo anterior (para el historial)
+      const pedidoAnterior = await this.obtenerPedidoPorId(pedido_id);
+      
+      // 1. Actualizar datos básicos del pedido si se proporcionan
+      const camposBasicos = ['proveedor_id', 'pedido_descuento', 'pedido_costo_envio', 'pedido_fecha_esperada_entrega'];
+      const updateFields = [];
+      const updateValues = [];
+      
+      camposBasicos.forEach(campo => {
+        if (modificaciones.hasOwnProperty(campo)) {
+          updateFields.push(`${campo} = ?`);
+          updateValues.push(modificaciones[campo]);
+        }
+      });
+      
+      if (updateFields.length > 0) {
+        await conn.query(
+          `UPDATE pedidos SET ${updateFields.join(', ')} WHERE pedido_id = ?`, 
+          [...updateValues, pedido_id]
+        );
+      }
+      
+      // 2. Eliminar todos los detalles existentes del pedido
+      await conn.query('DELETE FROM pedidos_detalle WHERE pedido_id = ?', [pedido_id]);
+      
+      // 3. Insertar nuevos productos registrados
+      if (modificaciones.productos && modificaciones.productos.length > 0) {
+        for (const producto of modificaciones.productos) {
+          await conn.query(
+            `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?, ?)`,
+            [pedido_id, producto.producto_id, producto.variante_id, producto.cantidad, producto.precio_costo]
+          );
+        }
+      }
+      
+      // 4. Insertar productos sin registrar (legacy)
+      if (modificaciones.productosSinRegistrar && modificaciones.productosSinRegistrar.length > 0) {
+        for (const producto of modificaciones.productosSinRegistrar) {
+          const tieneAtributos = producto.atributosConfigurados && producto.atributosConfigurados.atributos && producto.atributosConfigurados.atributos.length > 0;
+          
+          if (!tieneAtributos) {
+            // Producto simple sin atributos
+            await conn.query(
+              `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre) VALUES (?, ?, ?, ?, ?, ?)`,
+              [pedido_id, null, null, producto.cantidad, producto.precio_costo, producto.nombre]
+            );
+          } else {
+            // Este tipo de productos con atributos se deben manejar en formulariosVariantes
+            // No insertamos nada aquí para evitar duplicados
+          }
+        }
+      }
+      
+      // 5. Insertar variantes borrador (variantes nuevas de productos existentes)
+      if (modificaciones.variantesBorrador && modificaciones.variantesBorrador.length > 0) {
+        for (const variante of modificaciones.variantesBorrador) {
+          let productoNombre = 'Variante nueva';
+          
+          // Si tiene producto_id, obtener el nombre del producto
+          if (variante.vb_producto_id) {
+            const [producto] = await conn.query(
+              'SELECT producto_nombre FROM productos WHERE producto_id = ?', 
+              [variante.vb_producto_id]
+            );
+            if (producto.length > 0) {
+              productoNombre = `${producto[0].producto_nombre} (Variante nueva)`;
+            }
+          }
+          
+          await conn.query(
+            `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre, atributos_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              pedido_id, 
+              variante.vb_producto_id || null, 
+              null, // Las variantes borrador no tienen variante_id hasta que se creen
+              variante.vb_cantidad, 
+              variante.vb_precio_unitario, 
+              productoNombre,
+              JSON.stringify(variante.vb_atributos || [])
+            ]
+          );
+        }
+      }
+      
+      // 6. Insertar productos borrador (productos completamente nuevos)
+      if (modificaciones.productosBorrador && modificaciones.productosBorrador.length > 0) {
+        for (const producto of modificaciones.productosBorrador) {
+          if (producto.pbp_variantes && producto.pbp_variantes.length > 0) {
+            // Producto borrador con variantes
+            for (const variante of producto.pbp_variantes) {
+              const atributos = [];
+              
+              // Construir atributos desde los valores de la variante
+              if (producto.pbp_atributos && producto.pbp_atributos.atributos) {
+                producto.pbp_atributos.atributos.forEach(attr => {
+                  if (variante[attr.atributo_nombre]) {
+                    atributos.push({
+                      atributo_nombre: attr.atributo_nombre,
+                      valor_nombre: variante[attr.atributo_nombre]
+                    });
+                  }
+                });
+              }
+              
+              await conn.query(
+                `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre, atributos_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [
+                  pedido_id, 
+                  null, 
+                  null, 
+                  variante.cantidad, 
+                  variante.precio, 
+                  producto.pbp_nombre,
+                  JSON.stringify(atributos)
+                ]
+              );
+            }
+          } else {
+            // Producto borrador simple
+            await conn.query(
+              `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre) VALUES (?, ?, ?, ?, ?, ?)`,
+              [
+                pedido_id, 
+                null, 
+                null, 
+                producto.pbp_cantidad, 
+                producto.pbp_precio_unitario, 
+                producto.pbp_nombre
+              ]
+            );
+          }
+        }
+      }
+      
+      // 7. Recalcular y actualizar totales del pedido
+      const nuevoTotal = await this.calcularTotalPedido(conn, pedido_id);
+      await conn.query(
+        'UPDATE pedidos SET pedido_total = ? WHERE pedido_id = ?', 
+        [nuevoTotal, pedido_id]
+      );
+      
+      // 8. Obtener detalle completo nuevo (para el historial)
+      const pedidoNuevo = await this.obtenerPedidoPorId(pedido_id);
+      
+      // 9. Registrar modificación en historial
+      await conn.query(
+        `INSERT INTO pedidos_modificaciones (pm_pedido_id, pm_usuario_id, pm_motivo, pm_detalle_anterior, pm_detalle_nuevo) VALUES (?, ?, ?, ?, ?)`,
+        [
+          pedido_id,
+          usuario_id,
+          motivo,
+          JSON.stringify(pedidoAnterior),
+          JSON.stringify(pedidoNuevo)
+        ]
+      );
+      
+      await conn.commit();
+      return { 
+        success: true, 
+        message: 'Pedido modificado exitosamente',
+        pedido: pedidoNuevo
+      };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  /**
+   * Calcular total de un pedido basado en su detalle
+   * @param {object} conn - Conexión de base de datos
+   * @param {number} pedido_id
+   */
+  async calcularTotalPedido(conn, pedido_id) {
+    try {
+      // Obtener datos del pedido
+      const [pedido] = await conn.query('SELECT pedido_descuento, pedido_costo_envio FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      if (!pedido.length) return 0;
+      
+      // Obtener detalle del pedido
+      const [detalle] = await conn.query('SELECT cantidad, precio_unitario FROM pedidos_detalle WHERE pedido_id = ?', [pedido_id]);
+      
+      // Calcular subtotal
+      let subtotal = 0;
+      detalle.forEach(item => {
+        subtotal += (Number(item.cantidad) || 0) * (Number(item.precio_unitario) || 0);
+      });
+      
+      // Aplicar descuento y costo de envío
+      const descuentoPorcentaje = Number(pedido[0].pedido_descuento) || 0;
+      const costoEnvio = Number(pedido[0].pedido_costo_envio) || 0;
+      const subtotalConEnvio = subtotal + costoEnvio;
+      const descuentoMonto = subtotalConEnvio * (descuentoPorcentaje / 100);
+      const total = Math.max(0, subtotalConEnvio - descuentoMonto);
+      
+      return total;
+    } catch (err) {
+      console.error('Error al calcular total del pedido:', err);
+      return 0;
     }
   }
 }
