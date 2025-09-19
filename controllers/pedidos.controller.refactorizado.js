@@ -114,19 +114,11 @@ export const cancelarPedido = async (req, res) => {
 // Modificar pedido (actualización y registro en historial)
 export const modificarPedido = async (req, res) => {
   try {
-    const { pedido_id, modificaciones, motivo } = req.body;
+    const { pedido_id, modificaciones, motivo, itemsEliminados, variantesBorradorEliminadas, productosBorradorEliminados } = req.body;
     
     // Validar datos requeridos
     if (!pedido_id) {
       return ApiResponse.error(res, 'pedido_id es requerido.', 400);
-    }
-    
-    if (!modificaciones || Object.keys(modificaciones).length === 0) {
-      return ApiResponse.error(res, 'No se especificaron modificaciones.', 400);
-    }
-    
-    if (!motivo || !motivo.trim()) {
-      return ApiResponse.error(res, 'El motivo de la modificación es requerido.', 400);
     }
 
     // Validar que el usuario esté autenticado
@@ -134,46 +126,40 @@ export const modificarPedido = async (req, res) => {
       return ApiResponse.error(res, 'Usuario no autenticado.', 401);
     }
 
-    await PedidoService.modificarPedido(pedido_id, modificaciones, req.user.usuario_id, motivo.trim());
-    return ApiResponse.success(res, null, 'Pedido modificado y registrado en historial.');
+    // Si hay modificaciones complejas (items, eliminaciones), usar el método completo
+    if (modificaciones?.items || modificaciones?.variantesBorrador || modificaciones?.productosBorrador || 
+        itemsEliminados?.length > 0 || variantesBorradorEliminadas?.length > 0 || productosBorradorEliminados?.length > 0) {
+      
+      const datosCompletos = {
+        modificaciones,
+        itemsEliminados: itemsEliminados || [],
+        variantesBorradorEliminadas: variantesBorradorEliminadas || [],
+        productosBorradorEliminados: productosBorradorEliminados || []
+      };
+      
+      const result = await PedidoService.modificarPedidoCompleto(
+        pedido_id, 
+        datosCompletos, 
+        req.user.usuario_id, 
+        motivo || 'Modificación completa de pedido'
+      );
+      
+      return ApiResponse.success(res, result, 'Pedido modificado exitosamente');
+    } else {
+      // Para modificaciones simples, usar el método original
+      if (!modificaciones || Object.keys(modificaciones).length === 0) {
+        return ApiResponse.error(res, 'No se especificaron modificaciones.', 400);
+      }
+      
+      await PedidoService.modificarPedido(pedido_id, modificaciones, req.user.usuario_id, motivo?.trim() || 'Modificación de pedido');
+      return ApiResponse.success(res, null, 'Pedido modificado y registrado en historial.');
+    }
   } catch (error) {
+    console.error('Error al modificar pedido:', error);
     if (error.message.includes('no encontrado') || error.message.includes('estado pendiente')) {
       return ApiResponse.error(res, error.message, 400);
     }
     return ApiResponse.manejarErrorDB(error, res, 'modificar pedido');
-  }
-};
-
-// Modificar pedido completo con productos, variantes y productos borrador
-export const modificarPedidoCompleto = async (req, res) => {
-  try {
-    const { pedido_id, modificaciones, motivo } = req.body;
-    
-    // Validar datos requeridos
-    if (!pedido_id) {
-      return ApiResponse.error(res, 'pedido_id es requerido.', 400);
-    }
-    
-    if (!modificaciones || Object.keys(modificaciones).length === 0) {
-      return ApiResponse.error(res, 'No se especificaron modificaciones.', 400);
-    }
-    
-    if (!motivo || !motivo.trim()) {
-      return ApiResponse.error(res, 'El motivo de la modificación es requerido.', 400);
-    }
-
-    // Validar que el usuario esté autenticado
-    if (!req.user || !req.user.usuario_id) {
-      return ApiResponse.error(res, 'Usuario no autenticado.', 401);
-    }
-
-    const resultado = await PedidoService.modificarPedidoCompleto(pedido_id, modificaciones, req.user.usuario_id, motivo.trim());
-    return ApiResponse.success(res, resultado, 'Pedido modificado completamente y registrado en historial.');
-  } catch (error) {
-    if (error.message.includes('no encontrado') || error.message.includes('estado pendiente')) {
-      return ApiResponse.error(res, error.message, 400);
-    }
-    return ApiResponse.manejarErrorDB(error, res, 'modificar pedido completo');
   }
 };
 

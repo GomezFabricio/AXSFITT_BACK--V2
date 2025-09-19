@@ -957,16 +957,20 @@ class PedidoService {
   }
 
   /**
-   * Modificar pedido completo con productos, variantes y productos borrador
+   * Modificar pedido completo: actualiza cabecera, ítems, variantes borrador y productos borrador
    * @param {number} pedido_id
-   * @param {object} modificaciones - Incluye datos del pedido, productos, variantes borrador, productos borrador
+   * @param {Object} datosCompletos - todos los datos del pedido
    * @param {number} usuario_id
    * @param {string} motivo
    */
-  async modificarPedidoCompleto(pedido_id, modificaciones, usuario_id, motivo) {
+  async modificarPedidoCompleto(pedido_id, datosCompletos, usuario_id, motivo = 'Modificación completa de pedido') {
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
+      
+      console.log('=== INICIO MODIFICAR PEDIDO COMPLETO ===');
+      console.log('pedido_id:', pedido_id);
+      console.log('datosCompletos:', JSON.stringify(datosCompletos, null, 2));
       
       // Validar que el pedido existe y está en estado pendiente
       const [pedidoExistente] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
@@ -978,151 +982,160 @@ class PedidoService {
         throw new Error('Solo se pueden modificar pedidos en estado pendiente');
       }
 
-      // Obtener detalle completo anterior (para el historial)
-      const pedidoAnterior = await this.obtenerPedidoPorId(pedido_id);
+      // Obtener detalle anterior completo para historial
+      console.log('Obteniendo pedido anterior...');
+      // Usar conexión directa en lugar de this.obtenerPedidoPorId para evitar problemas con transacciones
+      const [cabeceraAnterior] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      const [itemsAnteriores] = await conn.query('SELECT * FROM pedidos_detalle WHERE pd_pedido_id = ?', [pedido_id]);
+      const [variantesBorradorAnteriores] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+      const [productosBorradorAnteriores] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
       
-      // 1. Actualizar datos básicos del pedido si se proporcionan
-      const camposBasicos = ['proveedor_id', 'pedido_descuento', 'pedido_costo_envio', 'pedido_fecha_esperada_entrega'];
-      const updateFields = [];
-      const updateValues = [];
+      const pedidoAnterior = {
+        ...cabeceraAnterior[0],
+        items: itemsAnteriores,
+        variantesBorrador: variantesBorradorAnteriores,
+        productosBorrador: productosBorradorAnteriores
+      };
       
-      camposBasicos.forEach(campo => {
-        if (modificaciones.hasOwnProperty(campo)) {
-          updateFields.push(`${campo} = ?`);
-          updateValues.push(modificaciones[campo]);
-        }
-      });
+      console.log('Items del pedido anterior:', pedidoAnterior?.items?.length || 0);
       
-      if (updateFields.length > 0) {
+      const { modificaciones, itemsEliminados = [], variantesBorradorEliminadas = [], productosBorradorEliminados = [] } = datosCompletos;
+      
+      // 1. Actualizar campos básicos del pedido
+      const camposBasicos = {};
+      if (modificaciones.pedido_descuento !== undefined) camposBasicos.pedido_descuento = modificaciones.pedido_descuento;
+      if (modificaciones.pedido_costo_envio !== undefined) camposBasicos.pedido_costo_envio = modificaciones.pedido_costo_envio;
+      if (modificaciones.pedido_fecha_esperada_entrega !== undefined) camposBasicos.pedido_fecha_esperada_entrega = modificaciones.pedido_fecha_esperada_entrega;
+      
+      // 2. Eliminar ítems marcados para eliminación
+      if (itemsEliminados.length > 0) {
         await conn.query(
-          `UPDATE pedidos SET ${updateFields.join(', ')} WHERE pedido_id = ?`, 
-          [...updateValues, pedido_id]
+          `DELETE FROM pedidos_detalle WHERE pd_id IN (${itemsEliminados.map(() => '?').join(',')})`,
+          itemsEliminados
         );
       }
       
-      // 2. Eliminar todos los detalles existentes del pedido
-      await conn.query('DELETE FROM pedidos_detalle WHERE pedido_id = ?', [pedido_id]);
-      
-      // 3. Insertar nuevos productos registrados
-      if (modificaciones.productos && modificaciones.productos.length > 0) {
-        for (const producto of modificaciones.productos) {
-          await conn.query(
-            `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario) VALUES (?, ?, ?, ?, ?)`,
-            [pedido_id, producto.producto_id, producto.variante_id, producto.cantidad, producto.precio_costo]
-          );
-        }
+      // 3. Eliminar variantes borrador marcadas para eliminación
+      if (variantesBorradorEliminadas.length > 0) {
+        await conn.query(
+          `DELETE FROM variantes_borrador WHERE vb_id IN (${variantesBorradorEliminadas.map(() => '?').join(',')})`,
+          variantesBorradorEliminadas
+        );
       }
       
-      // 4. Insertar productos sin registrar (legacy)
-      if (modificaciones.productosSinRegistrar && modificaciones.productosSinRegistrar.length > 0) {
-        for (const producto of modificaciones.productosSinRegistrar) {
-          const tieneAtributos = producto.atributosConfigurados && producto.atributosConfigurados.atributos && producto.atributosConfigurados.atributos.length > 0;
-          
-          if (!tieneAtributos) {
-            // Producto simple sin atributos
+      // 4. Eliminar productos borrador marcados para eliminación
+      if (productosBorradorEliminados.length > 0) {
+        await conn.query(
+          `DELETE FROM pedidos_borrador_producto WHERE pbp_id IN (${productosBorradorEliminados.map(() => '?').join(',')})`,
+          productosBorradorEliminados
+        );
+      }
+      
+      // 5. Actualizar ítems existentes
+      if (modificaciones.items) {
+        for (const [index, item] of Object.entries(modificaciones.items)) {
+          const indexNum = parseInt(index);
+          const itemId = pedidoAnterior.items?.[indexNum]?.pd_id;
+          if (itemId && item.pd_cantidad_pedida !== undefined) {
+            const cantidad = parseFloat(item.pd_cantidad_pedida) || 0;
+            const precio = parseFloat(item.pd_precio_unitario) || 0;
+            const subtotal = cantidad * precio;
+            
             await conn.query(
-              `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre) VALUES (?, ?, ?, ?, ?, ?)`,
-              [pedido_id, null, null, producto.cantidad, producto.precio_costo, producto.nombre]
+              `UPDATE pedidos_detalle SET pd_cantidad_pedida = ?, pd_precio_unitario = ?, pd_subtotal = ? WHERE pd_id = ?`,
+              [cantidad, precio, subtotal, itemId]
             );
-          } else {
-            // Este tipo de productos con atributos se deben manejar en formulariosVariantes
-            // No insertamos nada aquí para evitar duplicados
           }
         }
       }
       
-      // 5. Insertar variantes borrador (variantes nuevas de productos existentes)
-      if (modificaciones.variantesBorrador && modificaciones.variantesBorrador.length > 0) {
-        for (const variante of modificaciones.variantesBorrador) {
-          let productoNombre = 'Variante nueva';
-          
-          // Si tiene producto_id, obtener el nombre del producto
-          if (variante.vb_producto_id) {
-            const [producto] = await conn.query(
-              'SELECT producto_nombre FROM productos WHERE producto_id = ?', 
-              [variante.vb_producto_id]
-            );
-            if (producto.length > 0) {
-              productoNombre = `${producto[0].producto_nombre} (Variante nueva)`;
-            }
-          }
-          
-          await conn.query(
-            `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre, atributos_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [
-              pedido_id, 
-              variante.vb_producto_id || null, 
-              null, // Las variantes borrador no tienen variante_id hasta que se creen
-              variante.vb_cantidad, 
-              variante.vb_precio_unitario, 
-              productoNombre,
-              JSON.stringify(variante.vb_atributos || [])
-            ]
-          );
-        }
-      }
-      
-      // 6. Insertar productos borrador (productos completamente nuevos)
-      if (modificaciones.productosBorrador && modificaciones.productosBorrador.length > 0) {
-        for (const producto of modificaciones.productosBorrador) {
-          if (producto.pbp_variantes && producto.pbp_variantes.length > 0) {
-            // Producto borrador con variantes
-            for (const variante of producto.pbp_variantes) {
-              const atributos = [];
-              
-              // Construir atributos desde los valores de la variante
-              if (producto.pbp_atributos && producto.pbp_atributos.atributos) {
-                producto.pbp_atributos.atributos.forEach(attr => {
-                  if (variante[attr.atributo_nombre]) {
-                    atributos.push({
-                      atributo_nombre: attr.atributo_nombre,
-                      valor_nombre: variante[attr.atributo_nombre]
-                    });
-                  }
-                });
-              }
-              
-              await conn.query(
-                `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre, atributos_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [
-                  pedido_id, 
-                  null, 
-                  null, 
-                  variante.cantidad, 
-                  variante.precio, 
-                  producto.pbp_nombre,
-                  JSON.stringify(atributos)
-                ]
-              );
-            }
-          } else {
-            // Producto borrador simple
+      // 6. Actualizar variantes borrador
+      if (modificaciones.variantesBorrador) {
+        for (const [index, variante] of Object.entries(modificaciones.variantesBorrador)) {
+          const indexNum = parseInt(index);
+          const varianteId = pedidoAnterior.variantesBorrador?.[indexNum]?.vb_id;
+          if (varianteId && variante.vb_cantidad !== undefined) {
+            const cantidad = parseFloat(variante.vb_cantidad) || 0;
+            const precio = parseFloat(variante.vb_precio_unitario) || 0;
+            
             await conn.query(
-              `INSERT INTO pedidos_detalle (pedido_id, producto_id, variante_id, cantidad, precio_unitario, producto_nombre) VALUES (?, ?, ?, ?, ?, ?)`,
-              [
-                pedido_id, 
-                null, 
-                null, 
-                producto.pbp_cantidad, 
-                producto.pbp_precio_unitario, 
-                producto.pbp_nombre
-              ]
+              `UPDATE variantes_borrador SET vb_cantidad = ?, vb_precio_unitario = ? WHERE vb_id = ?`,
+              [cantidad, precio, varianteId]
             );
           }
         }
       }
       
-      // 7. Recalcular y actualizar totales del pedido
-      const nuevoTotal = await this.calcularTotalPedido(conn, pedido_id);
-      await conn.query(
-        'UPDATE pedidos SET pedido_total = ? WHERE pedido_id = ?', 
-        [nuevoTotal, pedido_id]
-      );
+      // 7. Actualizar productos borrador
+      if (modificaciones.productosBorrador) {
+        for (const [index, producto] of Object.entries(modificaciones.productosBorrador)) {
+          const indexNum = parseInt(index);
+          const productoId = pedidoAnterior.productosBorrador?.[indexNum]?.pbp_id;
+          if (productoId && producto.pbp_cantidad !== undefined) {
+            const cantidad = parseFloat(producto.pbp_cantidad) || 0;
+            const precio = parseFloat(producto.pbp_precio_costo) || 0;
+            
+            await conn.query(
+              `UPDATE pedidos_borrador_producto SET pbp_cantidad = ?, pbp_precio_unitario = ? WHERE pbp_id = ?`,
+              [cantidad, precio, productoId]
+            );
+          }
+        }
+      }
       
-      // 8. Obtener detalle completo nuevo (para el historial)
-      const pedidoNuevo = await this.obtenerPedidoPorId(pedido_id);
+      // 8. Recalcular total del pedido
+      const [totalesResult] = await conn.query(`
+        SELECT 
+          (
+            SELECT COALESCE(SUM(pd_subtotal), 0)
+            FROM pedidos_detalle 
+            WHERE pd_pedido_id = ?
+          ) +
+          (
+            SELECT COALESCE(SUM(vb_cantidad * vb_precio_unitario), 0)
+            FROM variantes_borrador 
+            WHERE vb_pedido_id = ?
+          ) +
+          (
+            SELECT COALESCE(SUM(pbp_cantidad * pbp_precio_unitario), 0)
+            FROM pedidos_borrador_producto 
+            WHERE pbp_pedido_id = ?
+          ) as total_productos
+      `, [pedido_id, pedido_id, pedido_id]);
       
-      // 9. Registrar modificación en historial
+      const totalProductos = totalesResult[0]?.total_productos || 0;
+      const descuento = parseFloat(camposBasicos.pedido_descuento || pedidoExistente[0].pedido_descuento || 0);
+      const costoEnvio = parseFloat(camposBasicos.pedido_costo_envio || pedidoExistente[0].pedido_costo_envio || 0);
+  const totalFinal = totalProductos - (totalProductos * (descuento / 100)) + costoEnvio;
+      
+      // Agregar el total calculado a los campos básicos
+      camposBasicos.pedido_total = totalFinal;
+      
+      // 9. Actualizar campos básicos del pedido (incluyendo el total)
+      if (Object.keys(camposBasicos).length > 0) {
+        const campos = Object.keys(camposBasicos).map(c => `${c} = ?`);
+        const valores = Object.values(camposBasicos);
+        
+        await conn.query(
+          `UPDATE pedidos SET ${campos.join(', ')} WHERE pedido_id = ?`, 
+          [...valores, pedido_id]
+        );
+      }
+      
+      // 10. Obtener detalle nuevo para historial (usar conexión directa)
+      const [cabeceraNueva] = await conn.query('SELECT * FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      const [itemsNuevos] = await conn.query('SELECT * FROM pedidos_detalle WHERE pd_pedido_id = ?', [pedido_id]);
+      const [variantesBorradorNuevas] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+      const [productosBorradorNuevos] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+      
+      const pedidoNuevo = {
+        ...cabeceraNueva[0],
+        items: itemsNuevos,
+        variantesBorrador: variantesBorradorNuevas,
+        productosBorrador: productosBorradorNuevos
+      };
+      
+      // 11. Registrar modificación en historial
       await conn.query(
         `INSERT INTO pedidos_modificaciones (pm_pedido_id, pm_usuario_id, pm_motivo, pm_detalle_anterior, pm_detalle_nuevo) VALUES (?, ?, ?, ?, ?)`,
         [
@@ -1135,50 +1148,13 @@ class PedidoService {
       );
       
       await conn.commit();
-      return { 
-        success: true, 
-        message: 'Pedido modificado exitosamente',
-        pedido: pedidoNuevo
-      };
+      return { success: true, message: 'Pedido modificado exitosamente', total: totalFinal };
     } catch (err) {
       await conn.rollback();
+      console.error('Error al modificar pedido completo:', err);
       throw err;
     } finally {
       conn.release();
-    }
-  }
-
-  /**
-   * Calcular total de un pedido basado en su detalle
-   * @param {object} conn - Conexión de base de datos
-   * @param {number} pedido_id
-   */
-  async calcularTotalPedido(conn, pedido_id) {
-    try {
-      // Obtener datos del pedido
-      const [pedido] = await conn.query('SELECT pedido_descuento, pedido_costo_envio FROM pedidos WHERE pedido_id = ?', [pedido_id]);
-      if (!pedido.length) return 0;
-      
-      // Obtener detalle del pedido
-      const [detalle] = await conn.query('SELECT cantidad, precio_unitario FROM pedidos_detalle WHERE pedido_id = ?', [pedido_id]);
-      
-      // Calcular subtotal
-      let subtotal = 0;
-      detalle.forEach(item => {
-        subtotal += (Number(item.cantidad) || 0) * (Number(item.precio_unitario) || 0);
-      });
-      
-      // Aplicar descuento y costo de envío
-      const descuentoPorcentaje = Number(pedido[0].pedido_descuento) || 0;
-      const costoEnvio = Number(pedido[0].pedido_costo_envio) || 0;
-      const subtotalConEnvio = subtotal + costoEnvio;
-      const descuentoMonto = subtotalConEnvio * (descuentoPorcentaje / 100);
-      const total = Math.max(0, subtotalConEnvio - descuentoMonto);
-      
-      return total;
-    } catch (err) {
-      console.error('Error al calcular total del pedido:', err);
-      return 0;
     }
   }
 }

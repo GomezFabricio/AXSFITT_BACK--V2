@@ -7,7 +7,6 @@ import {
   recepcionarPedido,
   cancelarPedido,
   modificarPedido,
-  modificarPedidoCompleto,
   obtenerHistorialModificaciones
 } from '../controllers/pedidos.controller.refactorizado.js';
 import authenticate from '../middlewares/auth.middleware.js';
@@ -85,14 +84,6 @@ router.post(
   authenticate,
   validarPermisos('Modificar Pedido'), // Debe coincidir con carga inicial
   modificarPedido
-);
-
-// Modificar pedido completo con productos, variantes y productos borrador
-router.post(
-  '/modificar-completo',
-  authenticate,
-  validarPermisos('Modificar Pedido'), // Debe coincidir con carga inicial
-  modificarPedidoCompleto
 );
 
 // Obtener historial de modificaciones
