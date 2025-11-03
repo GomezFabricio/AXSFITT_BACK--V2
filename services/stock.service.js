@@ -33,24 +33,28 @@ export class StockService {
       ORDER BY p.producto_nombre ASC
     `,
 
-    // Obtener variantes de un producto específico
+    // Obtener variantes de un producto específico (SIN DUPLICADOS)
     OBTENER_VARIANTES_PRODUCTO: `
-      SELECT 
+      SELECT DISTINCT
         v.variante_id,
         v.variante_sku,
-        COALESCE(s.cantidad, 0) AS stock_total,
-        ip.imagen_url,
-        vv.valor_nombre,
-        a.atributo_nombre,
+        COALESCE(MAX(s.cantidad), 0) AS stock_total,
+        MAX(ip.imagen_url) AS imagen_url,
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos_concatenados,
+        -- Mantener compatibilidad con código existente
+        SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT vv.valor_nombre ORDER BY a.atributo_nombre), ',', 1) AS valor_nombre,
+        SUBSTRING_INDEX(GROUP_CONCAT(DISTINCT a.atributo_nombre ORDER BY a.atributo_nombre), ',', 1) AS atributo_nombre,
         v.variante_estado,
-        COALESCE(s.stock_minimo, 0) AS stock_minimo,
-        COALESCE(s.stock_maximo, NULL) AS stock_maximo
+        COALESCE(MAX(s.stock_minimo), 0) AS stock_minimo,
+        COALESCE(MAX(s.stock_maximo), NULL) AS stock_maximo
       FROM variantes v
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-      WHERE v.producto_id = ? AND v.variante_estado = 'activo'
+      WHERE v.producto_id = ?
+      GROUP BY v.variante_id, v.variante_sku, v.variante_estado
+      ORDER BY v.variante_id
     `,
 
     // Verificar si existe registro de stock
