@@ -590,49 +590,90 @@ class PedidoService {
 
   /**
    * Recepcionar pedido: actualiza cantidades recibidas, precios, stock y movimientos
-   * MEJORADO: Incluye comparación de precios durante la recepción
+   * MEJORADO: Incluye comparación de precios durante la recepción y manejo de productos nuevos
    * @param {number} pedido_id
    * @param {Array} recepcion - [{detalle_id, cantidad_recibida, precio_costo_nuevo}]
    * @param {number} usuario_id
+   * @param {Array} productos_sin_registrar - productos agregados manualmente (opcional)
+   * @param {string} observaciones - observaciones de la recepción (opcional)
    */
-  async recepcionarPedido(pedido_id, recepcion, usuario_id) {
+  async recepcionarPedido(pedido_id, recepcion, usuario_id, productos_sin_registrar = [], observaciones = null) {
     const conn = await pool.getConnection();
     try {
+      console.log('🚀 Iniciando recepción pedido:', pedido_id);
+      console.log('📦 Items a recepcionar:', recepcion?.length || 0);
+      console.log('👤 Usuario ID:', usuario_id);
+      
+      // Verificar que el pedido existe
+      const [pedidoExiste] = await conn.query('SELECT pedido_id, pedido_estado FROM pedidos WHERE pedido_id = ?', [pedido_id]);
+      if (pedidoExiste.length === 0) {
+        throw new Error(`Pedido ${pedido_id} no encontrado`);
+      }
+      console.log('✅ Pedido existe, estado actual:', pedidoExiste[0].pedido_estado);
+      
       await conn.beginTransaction();
+      console.log('✅ Transacción iniciada');
 
-      // Actualizar estado pedido
+      // Actualizar estado pedido (usar 'completo' en lugar de 'recibido')
+      console.log('📋 Actualizando estado del pedido...');
+      const fechaEntrega = new Date().toISOString().slice(0, 10); // Solo fecha (YYYY-MM-DD)
+      console.log('📅 Fecha de entrega:', fechaEntrega);
       await conn.query('UPDATE pedidos SET pedido_estado = ?, pedido_fecha_entrega_real = ? WHERE pedido_id = ?', 
-        ['recibido', new Date(), pedido_id]);
+        ['completo', fechaEntrega, pedido_id]);
+      console.log('✅ Estado actualizado a completo');
 
       // Actualizar detalles, stock y registrar cambios de precios
+      console.log('🔄 Procesando items de recepción...');
       for (const item of recepcion) {
+        console.log(`📦 Procesando item detalle_id: ${item.detalle_id}`);
+        
         // Obtener información del detalle
+        console.log('🔍 Consultando detalle del pedido...');
         const [detalle] = await conn.query(
           'SELECT pd.*, p.producto_precio_costo, v.variante_precio_costo FROM pedidos_detalle pd LEFT JOIN productos p ON pd.pd_producto_id = p.producto_id LEFT JOIN variantes v ON pd.pd_variante_id = v.variante_id WHERE pd.pd_id = ?', 
           [item.detalle_id]
         );
+        console.log(`📊 Detalles encontrados: ${detalle.length}`);
 
-        if (detalle.length === 0) continue;
+        if (detalle.length === 0) {
+          console.log(`⚠️ No se encontró detalle para ID: ${item.detalle_id}`);
+          continue;
+        }
 
         const det = detalle[0];
         const producto_id = det.pd_producto_id;
         const variante_id = det.pd_variante_id;
+        console.log(`🔍 Detalle: producto_id=${producto_id}, variante_id=${variante_id}`);
 
         // Actualizar detalle del pedido
+        console.log('💾 Actualizando detalle del pedido...');
         await conn.query(
           'UPDATE pedidos_detalle SET pd_cantidad_recibida = ?, pd_precio_unitario = ? WHERE pd_id = ?', 
           [item.cantidad_recibida, item.precio_costo_nuevo || det.pd_precio_unitario, item.detalle_id]
         );
+        console.log('✅ Detalle actualizado');
 
         // Actualizar stock y crear movimiento
         if (producto_id || variante_id) {
+          // Si es variante pero producto_id es null, obtenerlo de la variante
+          let producto_id_movimiento = producto_id;
+          if (variante_id && !producto_id) {
+            const [varianteInfo] = await conn.query('SELECT producto_id FROM variantes WHERE variante_id = ?', [variante_id]);
+            if (varianteInfo.length > 0) {
+              producto_id_movimiento = varianteInfo[0].producto_id;
+              console.log(`🔗 Producto ID obtenido de variante: ${producto_id_movimiento}`);
+            }
+          }
+
           // Actualizar stock
           if (variante_id) {
+            console.log('📦 Actualizando stock de variante:', variante_id);
             await conn.query(
               'INSERT INTO stock (variante_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?', 
               [variante_id, item.cantidad_recibida, item.cantidad_recibida]
             );
           } else {
+            console.log('📦 Actualizando stock de producto:', producto_id);
             await conn.query(
               'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?', 
               [producto_id, item.cantidad_recibida, item.cantidad_recibida]
@@ -640,10 +681,12 @@ class PedidoService {
           }
 
           // Crear movimiento de stock
+          console.log(`📝 Registrando movimiento: producto_id=${producto_id_movimiento}, variante_id=${variante_id}`);
           await conn.query(
             'INSERT INTO stock_movimientos (sm_producto_id, sm_variante_id, sm_tipo_movimiento, sm_cantidad, sm_motivo, sm_pedido_id, sm_usuario_id) VALUES (?, ?, ?, ?, ?, ?, ?)', 
-            [producto_id, variante_id, 'entrada', item.cantidad_recibida, `Recepción pedido ${pedido_id}`, pedido_id, usuario_id]
+            [producto_id_movimiento, variante_id, 'entrada', item.cantidad_recibida, `Recepción pedido ${pedido_id}`, pedido_id, usuario_id]
           );
+          console.log('✅ Movimiento registrado');
 
           // Comparar y registrar cambios de precios
           if (item.precio_costo_nuevo) {
@@ -656,13 +699,14 @@ class PedidoService {
 
             // Si hay cambio de precio, registrarlo
             if (precioActual !== null && precioActual !== item.precio_costo_nuevo) {
+              console.log(`💰 Cambio de precio detectado: ${precioActual} -> ${item.precio_costo_nuevo}`);
               await conn.query(`
                 INSERT INTO precios_historicos (
                   ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
                   ph_motivo, ph_pedido_id, ph_usuario_id, ph_observaciones
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
               `, [
-                producto_id,
+                producto_id_movimiento, // Usar el producto_id corregido
                 variante_id,
                 precioActual,
                 item.precio_costo_nuevo,
@@ -691,16 +735,28 @@ class PedidoService {
       // Migrar productos borrador a tabla oficial de productos
       await this.migrarProductosBorrador(pedido_id, usuario_id, conn);
 
-      // Registrar modificación
+      // Registrar modificación con observaciones si las hay
+      const detalleModificacion = {
+        estado: 'completo', 
+        fecha_recepcion: new Date(),
+        observaciones: observaciones || null,
+        productos_nuevos: productos_sin_registrar?.length || 0
+      };
+      
       await conn.query(
         'INSERT INTO pedidos_modificaciones (pm_pedido_id, pm_usuario_id, pm_motivo, pm_detalle_anterior, pm_detalle_nuevo) VALUES (?, ?, ?, ?, ?)',
-        [pedido_id, usuario_id, 'Recepción de pedido con actualización de precios', 
-         JSON.stringify({ estado: 'pendiente' }), JSON.stringify({ estado: 'recibido', fecha_recepcion: new Date() })]
+        [pedido_id, usuario_id, 'Recepción de pedido con migración automática de productos borrador', 
+         JSON.stringify({ estado: 'pendiente' }), JSON.stringify(detalleModificacion)]
       );
 
       await conn.commit();
+      console.log('🎉 Recepción completada exitosamente');
       return true;
     } catch (err) {
+      console.error('❌ ERROR EN RECEPCIÓN:', err.message);
+      console.error('SQL Error Code:', err.code);
+      console.error('SQL Error SQL State:', err.sqlState);
+      console.error('Stack:', err.stack);
       await conn.rollback();
       throw err;
     } finally {
@@ -715,9 +771,12 @@ class PedidoService {
    * @param {Object} conn
    */
   async migrarVariantesBorrador(pedido_id, usuario_id, conn) {
+    console.log('🔄 Iniciando migración de variantes borrador para pedido:', pedido_id);
     const [variantesBorrador] = await conn.query('SELECT * FROM variantes_borrador WHERE vb_pedido_id = ?', [pedido_id]);
+    console.log(`📊 Encontradas ${variantesBorrador.length} variantes borrador`);
     
     for (const vb of variantesBorrador) {
+      console.log('🧬 Procesando variante borrador:', vb.vb_id, 'Producto:', vb.vb_producto_id);
       // Parsear atributos
       let atributos = vb.vb_atributos;
       if (typeof atributos === 'string') {
@@ -794,9 +853,12 @@ class PedidoService {
    * @param {Object} conn
    */
   async migrarProductosBorrador(pedido_id, usuario_id, conn) {
+    console.log('🔄 Iniciando migración de productos borrador para pedido:', pedido_id);
     const [productosBorrador] = await conn.query('SELECT * FROM pedidos_borrador_producto WHERE pbp_pedido_id = ?', [pedido_id]);
+    console.log(`📊 Encontrados ${productosBorrador.length} productos borrador`);
     
     for (const pb of productosBorrador) {
+      console.log('📦 Procesando producto borrador:', pb.pbp_id, 'Nombre:', pb.pbp_nombre);
       // Crear producto oficial (inicialmente inactivo)
       let resProd = await conn.query(
         'INSERT INTO productos (producto_nombre, producto_estado, producto_precio_costo) VALUES (?, ?, ?)', 

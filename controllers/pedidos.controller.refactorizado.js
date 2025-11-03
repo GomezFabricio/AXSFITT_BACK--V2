@@ -89,10 +89,17 @@ export const precargarProductoSinRegistrar = async (req, res) => {
 // Recepcionar pedido
 export const recepcionarPedido = async (req, res) => {
   try {
-    const { pedido_id, recepcion, usuario_id } = req.body;
-    await PedidoService.recepcionarPedido(pedido_id, recepcion, usuario_id);
+    const { pedido_id, recepcion, usuario_id, productos_sin_registrar, observaciones } = req.body;
+    
+    console.log('=== RECEPCIÓN PEDIDO ===');
+    console.log('Pedido ID:', pedido_id);
+    console.log('Usuario ID:', usuario_id);
+    console.log('Items recepción:', recepcion?.length || 0);
+    
+    await PedidoService.recepcionarPedido(pedido_id, recepcion, usuario_id, productos_sin_registrar, observaciones);
     return ApiResponse.success(res, null, 'Pedido recepcionado exitosamente.');
   } catch (error) {
+    console.error('Error en recepción:', error.message);
     return ApiResponse.manejarErrorDB(error, res, 'recepcionar pedido');
   }
 };
