@@ -21,6 +21,7 @@ import VentasRoutes from './routes/ventas.routes.js';
 import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
 import ProveedoresRoutesRefactorizado from './routes/proveedores.routes.refactorizado.js';
 import PedidosRoutesRefactorizado from './routes/pedidos.routes.refactorizado.js';
+import NotificacionesRoutes from './routes/notificaciones.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,6 +50,7 @@ app.use('/api/ventas', VentasRoutes);
 app.use('/api/ventas-v2', VentasRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/proveedores-v2', ProveedoresRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/pedidos-v2', PedidosRoutesRefactorizado); // Nueva versión refactorizada
+app.use('/api/notificaciones', NotificacionesRoutes); // Gestión de notificaciones
 
 app.get('/', (req, res) => {
     res.send('Servidor funcionando correctamente');

@@ -114,3 +114,26 @@ export const resolverFaltante = async (req, res) => {
     return ApiResponse.error(res, 'Error interno al resolver faltante.', 500);
   }
 };
+
+/**
+ * Marca un faltante como pedido
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const pedirFaltante = async (req, res) => {
+  try {
+    const { id_faltante } = req.params;
+    
+    await StockService.pedirFaltante(id_faltante);
+    
+    res.status(200).json({ message: 'Faltante marcado como pedido.' });
+  } catch (error) {
+    console.error('❌ Error en pedirFaltante:', error);
+    
+    if (error.message.includes('no encontrado')) {
+      return ApiResponse.error(res, error.message, 404);
+    }
+    
+    return ApiResponse.error(res, 'Error interno al marcar faltante como pedido.', 500);
+  }
+};

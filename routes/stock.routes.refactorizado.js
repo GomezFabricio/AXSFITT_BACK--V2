@@ -4,7 +4,8 @@ import {
   obtenerStock, 
   obtenerFaltantes, 
   registrarFaltante, 
-  resolverFaltante 
+  resolverFaltante,
+  pedirFaltante
 } from '../controllers/stock.controller.refactorizado.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -31,6 +32,10 @@ router.post(
 
 router.put(
   '/faltantes/:id_faltante/resolver', authenticate, validarPermisos('Gestionar Stock'), resolverFaltante
+);
+
+router.put(
+  '/faltantes/:id_faltante/pedir', authenticate, validarPermisos('Gestionar Stock'), pedirFaltante
 );
 
 export default router;

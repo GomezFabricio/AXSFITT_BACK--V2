@@ -209,7 +209,12 @@ export class StockService {
 
     // Resolver faltante
     RESOLVER_FALTANTE: `
-      UPDATE faltantes SET resuelto = TRUE WHERE id_faltante = ?
+      UPDATE faltantes SET faltante_estado = 'resuelto', faltante_resuelto = TRUE WHERE faltante_id = ?
+    `,
+
+    // Marcar faltante como pedido
+    PEDIR_FALTANTE: `
+      UPDATE faltantes SET faltante_estado = 'pedido_generado' WHERE faltante_id = ?
     `
   };
 
@@ -395,6 +400,28 @@ export class StockService {
       console.log(`✅ Faltante resuelto correctamente - ID: ${idFaltante}`);
     } catch (error) {
       console.error(`❌ Error al resolver faltante ID ${idFaltante}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Marca un faltante como pedido
+   * @param {number} idFaltante - ID del faltante
+   * @returns {Promise<void>}
+   */
+  static async pedirFaltante(idFaltante) {
+    console.log(`📦 Marcando faltante como pedido - ID: ${idFaltante}...`);
+    
+    try {
+      const [result] = await pool.query(this.QUERIES.PEDIR_FALTANTE, [idFaltante]);
+      
+      if (result.affectedRows === 0) {
+        throw new Error('Faltante no encontrado.');
+      }
+
+      console.log(`📦 Faltante marcado como pedido correctamente - ID: ${idFaltante}`);
+    } catch (error) {
+      console.error(`❌ Error al marcar faltante como pedido ID ${idFaltante}:`, error);
       throw error;
     }
   }
