@@ -5,7 +5,9 @@ import {
   obtenerFaltantes, 
   registrarFaltante, 
   resolverFaltante,
-  pedirFaltante
+  pedirFaltante,
+  enviarNotificacionesStock,
+  obtenerEstadisticasNotificaciones
 } from '../controllers/stock.controller.refactorizado.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -36,6 +38,15 @@ router.put(
 
 router.put(
   '/faltantes/:id_faltante/pedir', authenticate, validarPermisos('Gestionar Stock'), pedirFaltante
+);
+
+// Rutas para notificaciones de stock
+router.post(
+  '/notificaciones/enviar', authenticate, validarPermisos('Gestionar Stock'), enviarNotificacionesStock
+);
+
+router.get(
+  '/notificaciones/estadisticas', authenticate, validarPermisos('Gestionar Stock'), obtenerEstadisticasNotificaciones
 );
 
 export default router;

@@ -1,4 +1,5 @@
 import { StockService } from '../services/stock.service.js';
+import NotificacionesStockService from '../services/notificaciones-stock.service.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 /**
@@ -135,5 +136,43 @@ export const pedirFaltante = async (req, res) => {
     }
     
     return ApiResponse.error(res, 'Error interno al marcar faltante como pedido.', 500);
+  }
+};
+
+/**
+ * Envía notificaciones pendientes de stock
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const enviarNotificacionesStock = async (req, res) => {
+  try {
+    const resultado = await NotificacionesStockService.procesarNotificaciones();
+    
+    res.status(200).json({
+      message: 'Notificaciones procesadas exitosamente',
+      data: resultado
+    });
+  } catch (error) {
+    console.error('❌ Error en enviarNotificacionesStock:', error);
+    return ApiResponse.error(res, 'Error al enviar notificaciones de stock.', 500);
+  }
+};
+
+/**
+ * Obtiene estadísticas de notificaciones de stock
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const obtenerEstadisticasNotificaciones = async (req, res) => {
+  try {
+    const stats = await NotificacionesStockService.obtenerEstadisticas();
+    
+    res.status(200).json({
+      message: 'Estadísticas obtenidas exitosamente',
+      data: stats
+    });
+  } catch (error) {
+    console.error('❌ Error en obtenerEstadisticasNotificaciones:', error);
+    return ApiResponse.error(res, 'Error al obtener estadísticas de notificaciones.', 500);
   }
 };

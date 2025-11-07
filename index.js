@@ -22,6 +22,7 @@ import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
 import ProveedoresRoutesRefactorizado from './routes/proveedores.routes.refactorizado.js';
 import PedidosRoutesRefactorizado from './routes/pedidos.routes.refactorizado.js';
 import NotificacionesRoutes from './routes/notificaciones.routes.js';
+import NotificacionesStockService from './services/notificaciones-stock.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,6 +57,36 @@ app.get('/', (req, res) => {
     res.send('Servidor funcionando correctamente');
 });
 
+// Endpoint manual para enviar notificaciones de stock
+app.post('/api/enviar-notificaciones-stock', async (req, res) => {
+    try {
+        const resultado = await NotificacionesStockService.procesarNotificaciones();
+        res.json({
+            message: 'Notificaciones enviadas exitosamente',
+            data: resultado
+        });
+    } catch (error) {
+        console.error('Error enviando notificaciones:', error);
+        res.status(500).json({ error: 'Error al enviar notificaciones' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log('\n🔔 Sistema de notificaciones de stock activado');
+    console.log('📧 Para enviar notificaciones manualmente: POST /api/enviar-notificaciones-stock');
+    console.log('📊 Para ver estadísticas: GET /api/stock-v2/notificaciones/estadisticas');
+    
+    // Enviar notificaciones inicial después de 5 segundos
+    setTimeout(async () => {
+        try {
+            console.log('\n🚀 Enviando notificaciones pendientes al inicio...');
+            const resultado = await NotificacionesStockService.enviarNotificacionesPendientes();
+            if (resultado.enviadas > 0 || resultado.errores > 0) {
+                console.log(`📊 Resultado inicial: ${resultado.enviadas} enviadas, ${resultado.errores} errores`);
+            }
+        } catch (error) {
+            console.log('⚠️ Error en notificaciones inicial:', error.message);
+        }
+    }, 5000);
 });

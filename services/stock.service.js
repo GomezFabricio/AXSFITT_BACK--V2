@@ -292,23 +292,114 @@ export class StockService {
   }
 
   /**
-   * Obtiene todos los faltantes detectados usando la vista simplificada
-   * @returns {Promise<Array>} Lista de faltantes
+   * Obtiene todos los faltantes detectados usando la estructura actualizada de BD
+   * @returns {Promise<Array>} Lista de faltantes con información completa
    */
   static async obtenerFaltantes() {
-    console.log('🔍 Obteniendo faltantes...');
+    console.log('� Obteniendo faltantes desde base de datos actualizada...');
     
     try {
       const [faltantes] = await pool.query(`
-        SELECT * FROM v_faltantes_notificacion
-        ORDER BY faltante_fecha_deteccion DESC
+        SELECT 
+          f.faltante_id,
+          f.faltante_fecha_deteccion,
+          f.faltante_cantidad_original,
+          f.faltante_cantidad_faltante,
+          f.faltante_cantidad_solicitada,
+          f.faltante_estado,
+          f.faltante_resuelto,
+          f.faltante_producto_id,
+          f.faltante_variante_id,
+          f.faltante_pedido_id,
+          
+          -- Información del producto (si es faltante directo de producto)
+          p.producto_nombre as producto_directo_nombre,
+          
+          -- Información del producto de variante (si es faltante de variante)
+          p2.producto_nombre as producto_variante_nombre,
+          
+          -- Información de la variante
+          v.variante_id as variante_info_id,
+          v.variante_precio_venta,
+          v.variante_sku,
+          
+          -- Información del stock actual
+          s.cantidad as stock_actual,
+          s.stock_minimo,
+          s.stock_maximo,
+          s.ubicacion,
+          
+          -- Nombre del producto construido
+          CASE 
+            WHEN f.faltante_producto_id IS NOT NULL THEN p.producto_nombre
+            WHEN f.faltante_variante_id IS NOT NULL THEN 
+              CONCAT(p2.producto_nombre, ' (Variante ', f.faltante_variante_id, ')')
+            ELSE 'Producto no identificado'
+          END AS producto_nombre,
+          
+          -- Estado del stock
+          CASE 
+            WHEN s.cantidad = 0 THEN 'SIN_STOCK'
+            WHEN s.cantidad < s.stock_minimo THEN 'CRITICO'
+            WHEN s.cantidad <= (s.stock_minimo * 1.2) THEN 'BAJO'
+            ELSE 'NORMAL'
+          END AS estado_stock,
+          
+          -- Información de notificaciones relacionadas
+          COUNT(np.id) as notificaciones_enviadas
+          
+        FROM faltantes f
+        
+        -- Join con productos directos
+        LEFT JOIN productos p ON f.faltante_producto_id = p.producto_id
+        
+        -- Join con variantes y sus productos
+        LEFT JOIN variantes v ON f.faltante_variante_id = v.variante_id
+        LEFT JOIN productos p2 ON v.producto_id = p2.producto_id
+        
+        -- Join con stock actual
+        LEFT JOIN stock s ON (
+          (f.faltante_producto_id IS NOT NULL AND s.producto_id = f.faltante_producto_id) OR
+          (f.faltante_variante_id IS NOT NULL AND s.variante_id = f.faltante_variante_id)
+        )
+        
+        -- Join con notificaciones pendientes para saber si ya se notificó
+        LEFT JOIN notificaciones_pendientes np ON np.faltante_id = f.faltante_id
+        
+        GROUP BY f.faltante_id
+        
+        ORDER BY 
+          f.faltante_resuelto ASC,
+          f.faltante_fecha_deteccion DESC
       `);
       
       console.log(`✅ ${faltantes.length} faltantes encontrados`);
-      return faltantes;
+      
+      // Procesar los datos para agregar información adicional
+      const faltantesConInfo = faltantes.map(faltante => ({
+        ...faltante,
+        // Calcular días desde detección
+        dias_desde_deteccion: Math.floor((Date.now() - new Date(faltante.faltante_fecha_deteccion)) / (1000 * 60 * 60 * 24)),
+        
+        // Calcular porcentaje de cobertura actual
+        porcentaje_cobertura: faltante.stock_minimo > 0 
+          ? Math.round((faltante.stock_actual / faltante.stock_minimo) * 100)
+          : 0,
+          
+        // Información de urgencia
+        urgencia: faltante.stock_actual === 0 ? 'CRITICA' 
+          : faltante.stock_actual < faltante.stock_minimo ? 'ALTA'
+          : 'MEDIA',
+          
+        // Estado de notificaciones
+        notificado: faltante.notificaciones_enviadas > 0
+      }));
+      
+      return faltantesConInfo;
+      
     } catch (error) {
       console.error('❌ Error obteniendo faltantes:', error);
-      throw error;
+      throw new Error(`Error al obtener faltantes: ${error.message}`);
     }
   }
 
