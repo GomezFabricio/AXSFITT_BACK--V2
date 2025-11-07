@@ -29,7 +29,7 @@ router.get(
 );
 
 router.put(
-  '/configuracion/:id', 
+  '/configuracion/:tipo', 
   authenticate, 
   validarPermisos('Gestionar Stock'), 
   actualizarConfiguracionNotificaciones

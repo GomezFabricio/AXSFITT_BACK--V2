@@ -27,10 +27,10 @@ export const obtenerConfiguracionNotificaciones = async (req, res) => {
  */
 export const actualizarConfiguracionNotificaciones = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { tipo } = req.params; // 'email' o 'whatsapp'
     const datos = req.body;
     
-    await NotificacionesService.actualizarConfiguracion(id, datos);
+    await NotificacionesService.actualizarConfiguracion(tipo, datos);
     
     res.status(200).json({ 
       message: 'Configuración de notificaciones actualizada exitosamente' 

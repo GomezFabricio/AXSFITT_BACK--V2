@@ -247,21 +247,52 @@ export class NotificacionesService {
    */
   static async obtenerConfiguracion() {
     try {
-      // Retornamos configuración básica en lugar de consultar vista inexistente
-      return {
+      console.log('📋 Obteniendo configuración de notificaciones...');
+      
+      const [configs] = await pool.query(`
+        SELECT 
+          config_tipo,
+          config_activo,
+          config_frecuencia,
+          config_hora_envio,
+          config_dias_semana,
+          config_plantilla_personalizada
+        FROM notificaciones_config 
+        WHERE config_usuario_id = 1
+      `);
+      
+      const configuracion = {
         email: {
-          activo: true,
+          activo: false,
           frecuencia: 'inmediata',
           diasSemana: ['1', '2', '3', '4', '5'],
-          horaEnvio: '09:00'
+          horaEnvio: '09:00',
+          plantillaPersonalizada: null
         },
         whatsapp: {
           activo: false,
           frecuencia: 'inmediata', 
           diasSemana: ['1', '2', '3', '4', '5'],
-          horaEnvio: '09:00'
+          horaEnvio: '09:00',
+          plantillaPersonalizada: null
         }
       };
+      
+      // Mapear los resultados de la base de datos
+      configs.forEach(config => {
+        if (configuracion[config.config_tipo]) {
+          configuracion[config.config_tipo] = {
+            activo: Boolean(config.config_activo),
+            frecuencia: config.config_frecuencia,
+            diasSemana: config.config_dias_semana ? JSON.parse(config.config_dias_semana) : ['1', '2', '3', '4', '5'],
+            horaEnvio: config.config_hora_envio || '09:00',
+            plantillaPersonalizada: config.config_plantilla_personalizada
+          };
+        }
+      });
+      
+      console.log('✅ Configuración obtenida:', configuracion);
+      return configuracion;
       
     } catch (error) {
       console.error('❌ Error obteniendo configuración:', error);
@@ -271,23 +302,25 @@ export class NotificacionesService {
 
   /**
    * Actualiza la configuración de notificaciones
-   * @param {number} configId - ID de configuración
+   * @param {string} configTipo - Tipo de configuración ('email' o 'whatsapp')
    * @param {Object} datos - Nuevos datos
    */
-  static async actualizarConfiguracion(configId, datos) {
+  static async actualizarConfiguracion(configTipo, datos) {
     try {
-      const { activo, destinatarios, umbral, frecuencia } = datos;
+      const { activo, frecuencia, horaEnvio, diasSemana, plantillaPersonalizada } = datos;
       
       await pool.query(`
         UPDATE notificaciones_config 
         SET config_activo = ?,
-            config_destinatarios = ?,
-            config_umbral_notificacion = ?,
-            config_frecuencia_horas = ?
-        WHERE config_id = ?
-      `, [activo, JSON.stringify(destinatarios), umbral, frecuencia, configId]);
+            config_frecuencia = ?,
+            config_hora_envio = ?,
+            config_dias_semana = ?,
+            config_plantilla_personalizada = ?,
+            config_fecha_actualizacion = NOW()
+        WHERE config_tipo = ? AND config_usuario_id = 1
+      `, [activo, frecuencia, horaEnvio, JSON.stringify(diasSemana), plantillaPersonalizada, configTipo]);
       
-      console.log(`✅ Configuración ${configId} actualizada`);
+      console.log(`✅ Configuración ${configTipo} actualizada`);
       
     } catch (error) {
       console.error('❌ Error actualizando configuración:', error);
