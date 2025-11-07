@@ -12,7 +12,8 @@ import {
   actualizarContacto,
   eliminarContacto,
   obtenerConfiguracionFrecuencia,
-  actualizarConfiguracionFrecuencia
+  actualizarConfiguracionFrecuencia,
+  obtenerFaltantes
 } from '../controllers/notificaciones.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -113,6 +114,14 @@ router.put(
   authenticate, 
   validarPermisos('Gestionar Stock'), 
   actualizarConfiguracionFrecuencia
+);
+
+// Ruta para obtener faltantes detectados
+router.get(
+  '/faltantes', 
+  authenticate, 
+  validarPermisos('Gestionar Stock'), 
+  obtenerFaltantes
 );
 
 export default router;

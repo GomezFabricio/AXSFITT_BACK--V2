@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 30-08-2025 a las 20:46:38
+-- Tiempo de generación: 07-11-2025 a las 00:56:16
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.2.12
+-- Versión de PHP: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -20,6 +20,112 @@ SET time_zone = "+00:00";
 --
 -- Base de datos: `axsfitt`
 --
+
+DELIMITER $$
+--
+-- Procedimientos
+--
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_procesar_notificaciones_stock` ()   BEGIN
+        DECLARE done INT DEFAULT FALSE;
+        DECLARE v_faltante_id INT;
+        DECLARE v_producto_nombre VARCHAR(255);
+        DECLARE v_stock_actual INT;
+        DECLARE v_stock_minimo INT;
+        DECLARE v_faltante_cantidad INT;
+        DECLARE v_contacto_id INT;
+        DECLARE v_contacto_email VARCHAR(255);
+        DECLARE v_contacto_nombre VARCHAR(255);
+        DECLARE v_asunto VARCHAR(255);
+        DECLARE v_mensaje TEXT;
+        
+        -- Cursor para faltantes
+        DECLARE faltantes_cursor CURSOR FOR 
+            SELECT faltante_id, producto_nombre, stock_actual, stock_minimo, faltante_cantidad_faltante
+            FROM v_faltantes_notificacion
+            WHERE faltante_estado = 'detectado';
+            
+        -- Cursor para contactos activos
+        DECLARE contactos_cursor CURSOR FOR
+            SELECT contacto_id, contacto_email, contacto_nombre
+            FROM notificaciones_contactos 
+            WHERE contacto_activo = 1;
+            
+        DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+        
+        -- Abrir cursor de faltantes
+        OPEN faltantes_cursor;
+        
+        faltantes_loop: LOOP
+            FETCH faltantes_cursor INTO v_faltante_id, v_producto_nombre, v_stock_actual, v_stock_minimo, v_faltante_cantidad;
+            
+            IF done THEN
+                LEAVE faltantes_loop;
+            END IF;
+            
+            -- Preparar mensaje
+            SET v_asunto = CONCAT('ALERTA: Stock bajo - ', v_producto_nombre);
+            SET v_mensaje = CONCAT(
+                'Se ha detectado stock bajo en el siguiente producto:', CHAR(10), CHAR(10),
+                'Producto: ', v_producto_nombre, CHAR(10),
+                'Stock actual: ', v_stock_actual, CHAR(10),
+                'Stock mínimo: ', v_stock_minimo, CHAR(10),
+                'Cantidad faltante: ', v_faltante_cantidad, CHAR(10), CHAR(10),
+                'Se recomienda realizar un pedido lo antes posible.', CHAR(10), CHAR(10),
+                'Sistema de Gestión AXSFITT'
+            );
+            
+            -- Insertar notificaciones para cada contacto
+            SET done = FALSE;
+            OPEN contactos_cursor;
+            
+            contactos_loop: LOOP
+                FETCH contactos_cursor INTO v_contacto_id, v_contacto_email, v_contacto_nombre;
+                
+                IF done THEN
+                    LEAVE contactos_loop;
+                END IF;
+                
+                -- Insertar en tabla de notificaciones para envío
+                INSERT INTO notificaciones_pendientes (
+                    tipo_notificacion,
+                    destinatario_email,
+                    destinatario_nombre,
+                    asunto,
+                    mensaje,
+                    faltante_id,
+                    fecha_creacion,
+                    estado
+                ) VALUES (
+                    'email',
+                    v_contacto_email,
+                    v_contacto_nombre,
+                    v_asunto,
+                    v_mensaje,
+                    v_faltante_id,
+                    NOW(),
+                    'pendiente'
+                );
+                
+            END LOOP contactos_loop;
+            CLOSE contactos_cursor;
+            SET done = FALSE;
+            
+            -- Marcar faltante como procesado para notificaciones
+            UPDATE faltantes 
+            SET faltante_estado = 'registrado'
+            WHERE faltante_id = v_faltante_id;
+            
+        END LOOP faltantes_loop;
+        CLOSE faltantes_cursor;
+        
+        -- Retornar estadísticas
+        SELECT 
+            (SELECT COUNT(*) FROM notificaciones_pendientes WHERE estado = 'pendiente') as notificaciones_creadas,
+            (SELECT COUNT(*) FROM faltantes WHERE faltante_estado = 'registrado') as faltantes_procesados;
+            
+    END$$
+
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -60,9 +166,9 @@ CREATE TABLE `categorias` (
 
 INSERT INTO `categorias` (`categoria_id`, `categoria_padre_id`, `categoria_nombre`, `categoria_descripcion`, `categoria_orden`) VALUES
 (1, NULL, 'Proteínas', NULL, 1),
-(2, 1, 'Star', NULL, 1),
-(3, NULL, 'Creatinas', NULL, 2),
-(4, 3, 'Star', NULL, 1);
+(2, NULL, 'Creatinas', NULL, 2),
+(3, 1, 'Star', NULL, 1),
+(4, 2, 'Star', NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -85,7 +191,7 @@ CREATE TABLE `clientes` (
 --
 
 INSERT INTO `clientes` (`cliente_id`, `persona_id`, `cliente_email`, `cliente_password`, `cliente_google_id`, `cliente_fecha_alta`, `cliente_fecha_baja`) VALUES
-(1, 2, 'marcosperez@gmail.com', NULL, NULL, '2025-08-02 15:18:12', NULL);
+(1, 2, 'pedro@gmail.com', NULL, NULL, '2025-11-06 22:00:12', NULL);
 
 -- --------------------------------------------------------
 
@@ -211,6 +317,14 @@ CREATE TABLE `faltantes` (
   `faltante_resuelto` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Volcado de datos para la tabla `faltantes`
+--
+
+INSERT INTO `faltantes` (`faltante_id`, `faltante_producto_id`, `faltante_variante_id`, `faltante_fecha_deteccion`, `faltante_cantidad_original`, `faltante_cantidad_faltante`, `faltante_cantidad_solicitada`, `faltante_estado`, `faltante_pedido_id`, `faltante_resuelto`) VALUES
+(1, NULL, 2, '2025-11-06 22:00:12', 5, 1, 0, 'resuelto', NULL, 1),
+(3, NULL, 2, '2025-11-06 22:17:16', 4, 2, 0, 'resuelto', NULL, 1);
+
 -- --------------------------------------------------------
 
 --
@@ -229,12 +343,11 @@ CREATE TABLE `imagenes_productos` (
 --
 
 INSERT INTO `imagenes_productos` (`imagen_id`, `producto_id`, `imagen_url`, `imagen_orden`) VALUES
-(5, 1, '/uploads/1753977659470-477309931-2.png', 0),
-(6, 1, '/uploads/1753977659457-74086607-1.png', 1),
-(7, 1, '/uploads/1753977659479-973286339-3.png', 2),
-(8, 1, '/uploads/1753977659487-426521174-4.png', 3),
-(9, 2, '/uploads/1754147831076-525990848-15.png', 0),
-(10, 2, '/uploads/1754147831089-551698495-16.png', 1);
+(8, 2, '/uploads/1758302581230-978212042-15.png', 0),
+(9, 2, '/uploads/1758302581238-272173220-16.png', 1),
+(10, 1, '/uploads/1758302499461-79695005-1.png', 0),
+(11, 1, '/uploads/1758302499473-419007522-2.png', 1),
+(12, 1, '/uploads/1758302499482-797443712-4.png', 2);
 
 -- --------------------------------------------------------
 
@@ -278,6 +391,93 @@ INSERT INTO `modulos` (`modulo_id`, `modulo_padre_id`, `modulo_descripcion`) VAL
 -- --------------------------------------------------------
 
 --
+-- Estructura de tabla para la tabla `notificaciones_config`
+--
+
+CREATE TABLE `notificaciones_config` (
+  `config_id` int(10) UNSIGNED NOT NULL,
+  `config_tipo` enum('email','whatsapp','sms') NOT NULL,
+  `config_activo` tinyint(1) DEFAULT 1,
+  `config_destinatarios` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`config_destinatarios`)),
+  `config_template` text DEFAULT NULL,
+  `config_umbral_notificacion` int(10) UNSIGNED DEFAULT 1,
+  `config_frecuencia_horas` int(10) UNSIGNED DEFAULT 24,
+  `config_fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
+  `config_fecha_actualizacion` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `config_frecuencia` enum('inmediata','diaria','semanal') DEFAULT 'inmediata',
+  `config_hora_envio` time DEFAULT '09:00:00',
+  `config_dias_semana` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '["1"]' COMMENT 'Array de días de la semana (1=Lunes, 7=Domingo)' CHECK (json_valid(`config_dias_semana`)),
+  `config_umbral_cantidad` int(11) DEFAULT 5 COMMENT 'Cantidad mínima para generar notificación',
+  `config_plantilla_personalizada` text DEFAULT NULL COMMENT 'Plantilla personalizada de mensaje'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `notificaciones_config`
+--
+
+INSERT INTO `notificaciones_config` (`config_id`, `config_tipo`, `config_activo`, `config_destinatarios`, `config_template`, `config_umbral_notificacion`, `config_frecuencia_horas`, `config_fecha_creacion`, `config_fecha_actualizacion`, `config_frecuencia`, `config_hora_envio`, `config_dias_semana`, `config_umbral_cantidad`, `config_plantilla_personalizada`) VALUES
+(1, 'email', 1, '[\"fabricio.gomez4371@gmail.com\"]', '🚨 ALERTA DE STOCK BAJO - AXSFITT\n\nSe han detectado productos con stock por debajo del mínimo.\n\nPor favor, revise el sistema y genere los pedidos correspondientes.', 1, 6, '2025-11-06 18:28:41', '2025-11-06 21:56:13', 'inmediata', '09:00:00', '[\"1\",\"2\",\"3\",\"4\",\"5\"]', 5, NULL);
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `notificaciones_contactos`
+--
+
+CREATE TABLE `notificaciones_contactos` (
+  `contacto_id` int(11) NOT NULL,
+  `contacto_nombre` varchar(100) NOT NULL,
+  `contacto_email` varchar(255) DEFAULT NULL,
+  `contacto_telefono` varchar(20) DEFAULT NULL,
+  `contacto_activo` tinyint(1) DEFAULT 1,
+  `contacto_tipo` enum('email','whatsapp','ambos') DEFAULT 'email',
+  `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
+  `fecha_modificacion` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `contacto_avatar` varchar(255) DEFAULT NULL COMMENT 'URL del avatar del contacto'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `notificaciones_contactos`
+--
+
+INSERT INTO `notificaciones_contactos` (`contacto_id`, `contacto_nombre`, `contacto_email`, `contacto_telefono`, `contacto_activo`, `contacto_tipo`, `fecha_creacion`, `fecha_modificacion`, `contacto_avatar`) VALUES
+(5, 'fabricio gomez', 'fabricio.gomez4371@gmail.com', '', 1, 'email', '2025-11-06 21:29:05', '2025-11-06 21:55:14', NULL),
+(7, 'Pedro Martinez', 'pedro.martinez@empresa.com', '+5491187654321', 1, 'email', '2025-11-06 21:37:10', '2025-11-06 21:52:40', NULL),
+(8, 'Ana Rodriguez', 'ana.rodriguez@empresa.com', '+5491123456789', 1, 'whatsapp', '2025-11-06 21:37:10', '2025-11-06 21:37:10', NULL);
+
+-- --------------------------------------------------------
+
+--
+-- Estructura de tabla para la tabla `notificaciones_pendientes`
+--
+
+CREATE TABLE `notificaciones_pendientes` (
+  `id` int(11) NOT NULL,
+  `tipo_notificacion` enum('email','whatsapp') NOT NULL,
+  `destinatario_email` varchar(255) DEFAULT NULL,
+  `destinatario_nombre` varchar(255) DEFAULT NULL,
+  `destinatario_telefono` varchar(20) DEFAULT NULL,
+  `asunto` varchar(255) DEFAULT NULL,
+  `mensaje` text DEFAULT NULL,
+  `faltante_id` int(11) DEFAULT NULL,
+  `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
+  `fecha_envio` timestamp NULL DEFAULT NULL,
+  `estado` enum('pendiente','enviado','error') DEFAULT 'pendiente',
+  `error_mensaje` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `notificaciones_pendientes`
+--
+
+INSERT INTO `notificaciones_pendientes` (`id`, `tipo_notificacion`, `destinatario_email`, `destinatario_nombre`, `destinatario_telefono`, `asunto`, `mensaje`, `faltante_id`, `fecha_creacion`, `fecha_envio`, `estado`, `error_mensaje`) VALUES
+(1, 'email', 'fabricio.gomez4371@gmail.com', 'fabricio gomez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL),
+(2, 'email', 'pedro.martinez@empresa.com', 'Pedro Martinez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL),
+(3, 'email', 'ana.rodriguez@empresa.com', 'Ana Rodriguez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL);
+
+-- --------------------------------------------------------
+
+--
 -- Estructura de tabla para la tabla `pedidos`
 --
 
@@ -300,15 +500,7 @@ CREATE TABLE `pedidos` (
 --
 
 INSERT INTO `pedidos` (`pedido_id`, `pedido_proveedor_id`, `pedido_usuario_id`, `pedido_fecha_pedido`, `pedido_fecha_esperada_entrega`, `pedido_fecha_entrega_real`, `pedido_estado`, `pedido_observaciones`, `pedido_total`, `pedido_descuento`, `pedido_costo_envio`) VALUES
-(4, 3, 1, '2025-07-31 22:01:48', '2025-08-02', NULL, 'pendiente', NULL, 70495.00, 5.00, 1500.00),
-(7, 4, 1, '2025-08-02 15:35:40', '2025-08-04', NULL, 'pendiente', NULL, 51993.00, 7.00, 10000.00),
-(8, 1, 1, '2025-08-02 15:46:47', NULL, NULL, 'pendiente', NULL, 10000.00, 0.00, 0.00),
-(9, 4, 1, '2025-08-02 16:28:40', NULL, NULL, 'pendiente', NULL, 125000.00, 0.00, 0.00),
-(10, 3, 1, '2025-08-02 16:32:45', NULL, NULL, 'pendiente', NULL, 50.00, 0.00, 0.00),
-(11, 3, 1, '2025-08-02 16:38:34', NULL, NULL, 'pendiente', NULL, 5000.00, 0.00, 0.00),
-(12, 2, 1, '2025-08-30 17:02:48', '2025-08-03', NULL, 'pendiente', NULL, 10.00, 15.00, 10.00),
-(13, 4, 1, '2025-08-30 17:19:55', '2025-08-31', NULL, 'pendiente', NULL, 2000.00, 15.00, 2000.00),
-(17, 1, 1, '2025-08-30 18:45:33', NULL, NULL, 'pendiente', NULL, 216.00, 0.00, 15.00);
+(1, 2, 1, '2025-09-19 17:27:38', '2025-09-21', NULL, 'pendiente', NULL, 285000.00, 5.00, 10000.00);
 
 -- --------------------------------------------------------
 
@@ -329,6 +521,13 @@ CREATE TABLE `pedidos_borrador_producto` (
   `pbp_fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
   `pbp_fecha_actualizacion` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `pedidos_borrador_producto`
+--
+
+INSERT INTO `pedidos_borrador_producto` (`pbp_id`, `pbp_pedido_id`, `pbp_nombre`, `pbp_atributos`, `pbp_variantes`, `pbp_cantidad`, `pbp_precio_unitario`, `pbp_estado`, `pbp_fecha_creacion`, `pbp_fecha_actualizacion`) VALUES
+(1, 1, 'Whey Pro 2.0 Nutrilab', 'null', '[]', 10, 8500.00, 'borrador', '2025-09-19 17:27:38', '2025-09-19 17:27:38');
 
 -- --------------------------------------------------------
 
@@ -352,19 +551,8 @@ CREATE TABLE `pedidos_detalle` (
 --
 
 INSERT INTO `pedidos_detalle` (`pd_id`, `pd_pedido_id`, `pd_producto_id`, `pd_variante_id`, `pd_cantidad_pedida`, `pd_cantidad_recibida`, `pd_precio_unitario`, `pd_subtotal`) VALUES
-(1, 4, 1, NULL, 3, 0, 23000.00, NULL),
-(7, 7, 2, NULL, 1, 0, 22000.00, NULL),
-(8, 7, 1, NULL, 1, 0, 20000.00, NULL),
-(9, 7, NULL, NULL, 2, 0, 500.00, NULL),
-(10, 8, 1, NULL, 2, 0, 5000.00, NULL),
-(11, 9, 1, NULL, 25, 0, 5000.00, NULL),
-(12, 10, 1, NULL, 50, 0, 1.00, NULL),
-(13, 11, NULL, 2, 100, 0, 50.00, NULL),
-(14, 12, 1, NULL, 1, 0, NULL, NULL),
-(15, 12, 2, NULL, 1, 0, NULL, NULL),
-(16, 13, 1, NULL, 1, 0, NULL, NULL),
-(17, 13, 2, NULL, 1, 0, NULL, NULL),
-(23, 17, 1, NULL, 2, 0, 100.50, NULL);
+(1, 1, NULL, 1, 3, 0, 21000.00, NULL),
+(2, 1, NULL, 2, 2, 0, 21000.00, NULL);
 
 -- --------------------------------------------------------
 
@@ -568,7 +756,7 @@ CREATE TABLE `personas` (
 
 INSERT INTO `personas` (`persona_id`, `persona_nombre`, `persona_apellido`, `persona_dni`, `persona_fecha_nac`, `persona_domicilio`, `persona_telefono`, `persona_fecha_alta`, `persona_cuit`) VALUES
 (1, 'Fabricio', 'Gómez', '44464371', '2002-09-30', NULL, NULL, NULL, NULL),
-(2, 'Marcos', 'Perez', '44555666', NULL, NULL, '3704552266', '2025-08-02', NULL);
+(2, 'Pedro', 'Sanchez', '44333222', NULL, NULL, '3704569668', '2025-11-06', NULL);
 
 -- --------------------------------------------------------
 
@@ -590,6 +778,14 @@ CREATE TABLE `precios_historicos` (
   `ph_fecha_cambio` timestamp NOT NULL DEFAULT current_timestamp(),
   `ph_observaciones` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `precios_historicos`
+--
+
+INSERT INTO `precios_historicos` (`ph_id`, `ph_producto_id`, `ph_variante_id`, `ph_precio_costo_anterior`, `ph_precio_costo_nuevo`, `ph_precio_venta_anterior`, `ph_precio_venta_nuevo`, `ph_motivo`, `ph_pedido_id`, `ph_usuario_id`, `ph_fecha_cambio`, `ph_observaciones`) VALUES
+(1, 1, 1, 20000.00, 21000.00, NULL, NULL, 'recepcion_pedido', 1, 1, '2025-09-19 17:27:38', 'Cambio de precio detectado en pedido. Precio anterior: $20000.00, Precio nuevo: $21000'),
+(2, 1, 2, 22000.00, 21000.00, NULL, NULL, 'recepcion_pedido', 1, 1, '2025-09-19 17:27:38', 'Cambio de precio detectado en pedido. Precio anterior: $22000.00, Precio nuevo: $21000');
 
 -- --------------------------------------------------------
 
@@ -617,8 +813,8 @@ CREATE TABLE `productos` (
 --
 
 INSERT INTO `productos` (`producto_id`, `categoria_id`, `producto_nombre`, `producto_descripcion`, `producto_precio_venta`, `producto_precio_costo`, `producto_precio_oferta`, `producto_sku`, `producto_estado`, `producto_fecha_alta`, `producto_fecha_baja`, `producto_visible`) VALUES
-(1, 2, 'Whey Protein 2Lb', NULL, NULL, NULL, NULL, NULL, 'activo', '2025-07-31 16:01:35', NULL, 1),
-(2, 4, 'Creatina Monohidratada', NULL, 26000.00, 20000.00, NULL, NULL, 'activo', '2025-08-02 15:17:12', NULL, 1);
+(1, 3, 'Whey Protein ', NULL, NULL, NULL, NULL, NULL, 'activo', '2025-09-19 17:22:29', NULL, 1),
+(2, 4, 'Creatina Monohidratada', NULL, 22000.00, 20000.00, NULL, NULL, 'activo', '2025-09-19 17:23:09', NULL, 1);
 
 -- --------------------------------------------------------
 
@@ -660,10 +856,9 @@ CREATE TABLE `proveedores` (
 --
 
 INSERT INTO `proveedores` (`proveedor_id`, `proveedor_nombre`, `proveedor_contacto`, `proveedor_email`, `proveedor_telefono`, `proveedor_direccion`, `proveedor_cuit`, `proveedor_estado`, `proveedor_fecha_registro`) VALUES
-(1, 'Proveedor Principal S.A.aaaaaa', 'Juan Pérez', 'contacto@proveedorprincipal.com', '011-4567-8900', 'Av. Corrientes 1234, CABA', '30-12345678-9', 'activo', '2025-07-27 18:55:37'),
-(2, 'Distribuidora NorteEE', 'María González', 'ventas@distribuidoranorte.com', '011-5678-9001', 'Av. Santa Fe 5678, CABA', '30-87654321-0', 'activo', '2025-07-27 18:55:37'),
-(3, 'Mayorista Central', 'Carlos Rodríguez', 'pedidos@mayoristacentral.com', '011-6789-0123', 'Av. Rivadavia 9876, CABA', '30-11223344-5', 'activo', '2025-07-27 18:55:37'),
-(4, 'Nose ', '', 'ariel@gmail.com', '3213213211', '', '', 'activo', '2025-07-27 19:54:46');
+(1, 'Proveedor Principal S.A.', 'Juan Pérez', 'contacto@proveedorprincipal.com', '011-4567-8900', 'Av. Corrientes 1234, CABA', '30-12345678-9', 'activo', '2025-09-19 17:18:33'),
+(2, 'Distribuidora Norte', 'María González', 'ventas@distribuidoranorte.com', '011-5678-9001', 'Av. Santa Fe 5678, CABA', '30-87654321-0', 'activo', '2025-09-19 17:18:33'),
+(3, 'Mayorista Central', 'Carlos Rodríguez', 'pedidos@mayoristacentral.com', '011-6789-0123', 'Av. Rivadavia 9876, CABA', '30-11223344-5', 'activo', '2025-09-19 17:18:33');
 
 -- --------------------------------------------------------
 
@@ -687,10 +882,52 @@ CREATE TABLE `stock` (
 --
 
 INSERT INTO `stock` (`stock_id`, `producto_id`, `variante_id`, `cantidad`, `ubicacion`, `fecha_actualizacion`, `stock_minimo`, `stock_maximo`) VALUES
-(1, NULL, 1, 9, NULL, '2025-08-02 15:25:06', 0, NULL),
-(2, NULL, 2, 10, NULL, '2025-08-02 15:18:58', 0, NULL),
-(3, 1, NULL, 0, NULL, '2025-07-31 18:13:08', 0, NULL),
-(4, 2, NULL, 9, NULL, '2025-08-02 15:18:12', 0, NULL);
+(1, NULL, 1, 10, NULL, '2025-09-19 17:24:06', 8, 15),
+(2, NULL, 2, 8, NULL, '2025-11-06 23:40:36', 6, 20),
+(3, 2, NULL, 10, NULL, '2025-09-19 17:24:48', 8, 15),
+(4, 1, NULL, 0, NULL, '2025-11-06 23:40:36', 0, NULL);
+
+--
+-- Disparadores `stock`
+--
+DELIMITER $$
+CREATE TRIGGER `trg_detectar_faltante_update` AFTER UPDATE ON `stock` FOR EACH ROW BEGIN
+          IF NEW.cantidad < NEW.stock_minimo AND OLD.cantidad >= OLD.stock_minimo THEN
+              IF NOT EXISTS (
+                  SELECT 1 FROM faltantes 
+                  WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
+                  AND faltante_estado IN ('detectado', 'registrado', 'solicitado_parcial', 'solicitado_completo', 'pedido_generado', 'en_transito')
+              ) THEN
+                  INSERT INTO faltantes (
+                      faltante_producto_id,
+                      faltante_variante_id,
+                      faltante_cantidad_original,
+                      faltante_cantidad_faltante,
+                      faltante_estado
+                  ) VALUES (
+                      NEW.producto_id,
+                      NEW.variante_id,
+                      NEW.cantidad,
+                      NEW.stock_minimo - NEW.cantidad,
+                      'detectado'
+                  );
+              END IF;
+          END IF;
+      END
+$$
+DELIMITER ;
+DELIMITER $$
+CREATE TRIGGER `trg_resolver_faltante_stock_update` AFTER UPDATE ON `stock` FOR EACH ROW BEGIN
+          IF NEW.cantidad >= NEW.stock_minimo AND OLD.cantidad < OLD.stock_minimo THEN
+              UPDATE faltantes 
+              SET faltante_estado = 'resuelto', 
+                  faltante_resuelto = 1
+              WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
+              AND faltante_estado IN ('detectado', 'registrado', 'solicitado_parcial', 'solicitado_completo');
+          END IF;
+      END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -793,8 +1030,8 @@ CREATE TABLE `variantes` (
 --
 
 INSERT INTO `variantes` (`variante_id`, `producto_id`, `imagen_id`, `variante_precio_venta`, `variante_precio_costo`, `variante_precio_oferta`, `variante_sku`, `variante_estado`) VALUES
-(1, 1, 6, 25000.00, NULL, NULL, NULL, 'activo'),
-(2, 1, 5, 23000.00, 20000.00, NULL, NULL, 'activo');
+(1, 1, 10, 25000.00, 21000.00, 23000.00, NULL, 'activo'),
+(2, 1, 11, 26500.00, 21000.00, NULL, NULL, 'activo');
 
 -- --------------------------------------------------------
 
@@ -812,6 +1049,13 @@ CREATE TABLE `variantes_borrador` (
   `vb_estado` enum('borrador','registrado') DEFAULT 'borrador',
   `vb_fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Volcado de datos para la tabla `variantes_borrador`
+--
+
+INSERT INTO `variantes_borrador` (`vb_id`, `vb_pedido_id`, `vb_producto_id`, `vb_atributos`, `vb_cantidad`, `vb_precio_unitario`, `vb_estado`, `vb_fecha_creacion`) VALUES
+(1, 1, 1, '[{\"atributo_nombre\":\"Sabor\",\"valor_nombre\":\"Dulce de leche\"}]', 5, 20000.00, 'borrador', '2025-09-19 17:27:38');
 
 -- --------------------------------------------------------
 
@@ -837,9 +1081,7 @@ CREATE TABLE `ventas` (
 --
 
 INSERT INTO `ventas` (`venta_id`, `cliente_id`, `cupon_id`, `venta_fecha`, `venta_estado_pago`, `venta_estado_envio`, `venta_monto_total`, `venta_monto_descuento`, `venta_origen`, `venta_nota`) VALUES
-(1, 1, NULL, '2025-08-02 15:18:12', 'abonado', 'pendiente', 26000.00, 0.00, 'Venta Manual', NULL),
-(2, 1, NULL, '2025-08-02 15:18:58', 'abonado', 'pendiente', 23000.00, 0.00, 'Whatsapp', NULL),
-(4, 1, NULL, '2025-08-02 15:25:06', 'pendiente', 'pendiente', 25000.00, 0.00, '', NULL);
+(1, 1, NULL, '2025-11-06 22:00:12', 'abonado', 'pendiente', 53000.00, 0.00, 'Venta Manual', NULL);
 
 -- --------------------------------------------------------
 
@@ -859,16 +1101,14 @@ CREATE TABLE `ventas_detalle` (
   `producto_nombre` varchar(255) DEFAULT NULL,
   `variante_descripcion` varchar(255) DEFAULT NULL,
   `combo_nombre` varchar(255) DEFAULT NULL
-) ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Volcado de datos para la tabla `ventas_detalle`
 --
 
 INSERT INTO `ventas_detalle` (`vd_id`, `venta_id`, `producto_id`, `variante_id`, `combo_id`, `vd_cantidad`, `vd_precio_unitario`, `vd_subtotal`, `producto_nombre`, `variante_descripcion`, `combo_nombre`) VALUES
-(1, 1, 2, NULL, NULL, 1, 26000.00, 26000.00, 'Creatina Monohidratada', NULL, NULL),
-(2, 2, NULL, 2, NULL, 1, 23000.00, 23000.00, 'Whey Protein 2Lb', 'Sabor: Frutilla', NULL),
-(3, 4, NULL, 1, NULL, 1, 25000.00, 25000.00, 'Whey Protein 2Lb', 'Sabor: Vainilla', NULL);
+(1, 1, NULL, 2, NULL, 2, 26500.00, 53000.00, 'Whey Protein ', 'Sabor: Frutilla', NULL);
 
 --
 -- Índices para tablas volcadas
@@ -966,6 +1206,26 @@ ALTER TABLE `imagenes_temporales`
 ALTER TABLE `modulos`
   ADD PRIMARY KEY (`modulo_id`),
   ADD KEY `modulos_FKIndex1` (`modulo_padre_id`);
+
+--
+-- Indices de la tabla `notificaciones_config`
+--
+ALTER TABLE `notificaciones_config`
+  ADD PRIMARY KEY (`config_id`);
+
+--
+-- Indices de la tabla `notificaciones_contactos`
+--
+ALTER TABLE `notificaciones_contactos`
+  ADD PRIMARY KEY (`contacto_id`),
+  ADD UNIQUE KEY `unique_email` (`contacto_email`),
+  ADD KEY `idx_activo_tipo` (`contacto_activo`,`contacto_tipo`);
+
+--
+-- Indices de la tabla `notificaciones_pendientes`
+--
+ALTER TABLE `notificaciones_pendientes`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indices de la tabla `pedidos`
@@ -1194,19 +1454,19 @@ ALTER TABLE `estados_usuarios`
 -- AUTO_INCREMENT de la tabla `faltantes`
 --
 ALTER TABLE `faltantes`
-  MODIFY `faltante_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `faltante_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT de la tabla `imagenes_productos`
 --
 ALTER TABLE `imagenes_productos`
-  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT de la tabla `imagenes_temporales`
 --
 ALTER TABLE `imagenes_temporales`
-  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT de la tabla `modulos`
@@ -1215,22 +1475,40 @@ ALTER TABLE `modulos`
   MODIFY `modulo_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
+-- AUTO_INCREMENT de la tabla `notificaciones_config`
+--
+ALTER TABLE `notificaciones_config`
+  MODIFY `config_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
+-- AUTO_INCREMENT de la tabla `notificaciones_contactos`
+--
+ALTER TABLE `notificaciones_contactos`
+  MODIFY `contacto_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+
+--
+-- AUTO_INCREMENT de la tabla `notificaciones_pendientes`
+--
+ALTER TABLE `notificaciones_pendientes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
 -- AUTO_INCREMENT de la tabla `pedidos`
 --
 ALTER TABLE `pedidos`
-  MODIFY `pedido_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=18;
+  MODIFY `pedido_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `pedidos_borrador_producto`
 --
 ALTER TABLE `pedidos_borrador_producto`
-  MODIFY `pbp_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `pbp_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `pedidos_detalle`
 --
 ALTER TABLE `pedidos_detalle`
-  MODIFY `pd_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=24;
+  MODIFY `pd_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `pedidos_modificaciones`
@@ -1266,7 +1544,7 @@ ALTER TABLE `personas`
 -- AUTO_INCREMENT de la tabla `precios_historicos`
 --
 ALTER TABLE `precios_historicos`
-  MODIFY `ph_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `ph_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT de la tabla `productos`
@@ -1284,7 +1562,7 @@ ALTER TABLE `promociones`
 -- AUTO_INCREMENT de la tabla `proveedores`
 --
 ALTER TABLE `proveedores`
-  MODIFY `proveedor_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `proveedor_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT de la tabla `stock`
@@ -1314,19 +1592,19 @@ ALTER TABLE `variantes`
 -- AUTO_INCREMENT de la tabla `variantes_borrador`
 --
 ALTER TABLE `variantes_borrador`
-  MODIFY `vb_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `vb_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `ventas`
 --
 ALTER TABLE `ventas`
-  MODIFY `venta_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `venta_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT de la tabla `ventas_detalle`
 --
 ALTER TABLE `ventas_detalle`
-  MODIFY `vd_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+  MODIFY `vd_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- Restricciones para tablas volcadas

@@ -292,38 +292,22 @@ export class StockService {
   }
 
   /**
-   * Obtiene todos los faltantes (registrados y por registrar)
+   * Obtiene todos los faltantes detectados usando la vista simplificada
    * @returns {Promise<Array>} Lista de faltantes
    */
   static async obtenerFaltantes() {
     console.log('🔍 Obteniendo faltantes...');
     
     try {
-      // Ejecutar todas las consultas en paralelo para optimizar
-      const [
-        [faltantesProductosRegistrados],
-        [faltantesVariantesRegistradas],
-        [faltantesProductosPorRegistrar],
-        [faltantesVariantesPorRegistrar]
-      ] = await Promise.all([
-        pool.query(this.QUERIES.OBTENER_FALTANTES_PRODUCTOS_REGISTRADOS),
-        pool.query(this.QUERIES.OBTENER_FALTANTES_VARIANTES_REGISTRADAS),
-        pool.query(this.QUERIES.OBTENER_FALTANTES_PRODUCTOS_POR_REGISTRAR),
-        pool.query(this.QUERIES.OBTENER_FALTANTES_VARIANTES_POR_REGISTRAR)
-      ]);
-
-      // Combinar resultados
-      const faltantes = [
-        ...faltantesProductosRegistrados,
-        ...faltantesVariantesRegistradas,
-        ...faltantesProductosPorRegistrar,
-        ...faltantesVariantesPorRegistrar
-      ];
-
-      console.log(`✅ Faltantes obtenidos: ${faltantes.length} elementos`);
+      const [faltantes] = await pool.query(`
+        SELECT * FROM v_faltantes_notificacion
+        ORDER BY faltante_fecha_deteccion DESC
+      `);
+      
+      console.log(`✅ ${faltantes.length} faltantes encontrados`);
       return faltantes;
     } catch (error) {
-      console.error('❌ Error en obtenerFaltantes:', error);
+      console.error('❌ Error obteniendo faltantes:', error);
       throw error;
     }
   }

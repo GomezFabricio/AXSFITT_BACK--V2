@@ -282,3 +282,18 @@ export const actualizarConfiguracionFrecuencia = async (req, res) => {
     return ApiResponse.error(res, 'Error al actualizar configuración de frecuencia', 500);
   }
 };
+
+/**
+ * Obtiene la lista de productos/variantes con faltantes detectados
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const obtenerFaltantes = async (req, res) => {
+  try {
+    const faltantes = await NotificacionesService.obtenerFaltantesDetectados();
+    res.status(200).json(faltantes);
+  } catch (error) {
+    console.error('❌ Error en obtenerFaltantes:', error);
+    return ApiResponse.error(res, 'Error al obtener faltantes', 500);
+  }
+};

@@ -559,4 +559,25 @@ export class NotificacionesService {
       throw error;
     }
   }
+
+  /**
+   * Obtiene la lista de faltantes detectados
+   * @returns {Promise<Array>} Lista de faltantes
+   */
+  static async obtenerFaltantesDetectados() {
+    try {
+      console.log('📋 Obteniendo faltantes detectados...');
+      
+      const [faltantes] = await pool.query(`
+        SELECT * FROM v_faltantes_notificacion
+        ORDER BY faltante_fecha_deteccion DESC
+      `);
+      
+      console.log(`✅ ${faltantes.length} faltantes encontrados`);
+      return faltantes;
+    } catch (error) {
+      console.error('❌ Error obteniendo faltantes:', error);
+      throw error;
+    }
+  }
 }
