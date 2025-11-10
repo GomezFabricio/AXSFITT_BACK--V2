@@ -89,4 +89,26 @@ app.listen(PORT, () => {
             console.log('⚠️ Error en notificaciones inicial:', error.message);
         }
     }, 5000);
+
+    // 🔄 PROCESAMIENTO AUTOMÁTICO DE NOTIFICACIONES CADA 5 MINUTOS
+    setInterval(async () => {
+        try {
+            console.log('\n⏰ [' + new Date().toLocaleString() + '] Verificando notificaciones pendientes...');
+            const resultado = await NotificacionesStockService.enviarNotificacionesPendientes();
+            
+            if (resultado.enviadas > 0) {
+                console.log(`✅ ${resultado.enviadas} notificaciones enviadas automáticamente`);
+            }
+            if (resultado.errores > 0) {
+                console.log(`❌ ${resultado.errores} notificaciones fallaron`);
+            }
+            if (resultado.enviadas === 0 && resultado.errores === 0) {
+                console.log('📭 No hay notificaciones pendientes');
+            }
+        } catch (error) {
+            console.error('💥 Error en procesamiento automático de notificaciones:', error);
+        }
+    }, 5 * 60 * 1000); // Cada 5 minutos (300,000 ms)
+
+    console.log('⏲️ Procesamiento automático de notificaciones configurado (cada 5 minutos)');
 });
