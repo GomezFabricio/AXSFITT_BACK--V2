@@ -14,7 +14,7 @@ export class NotificacionesStockService {
     try {
       console.log('\n📧 === SERVICIO DE NOTIFICACIONES DE STOCK ===');
       
-      // Obtener notificaciones pendientes
+      // Obtener notificaciones pendientes QUE CORRESPONDAN A LA FECHA DEL DÍA
       const [pendientes] = await pool.query(`
         SELECT 
           np.id,
@@ -24,6 +24,7 @@ export class NotificacionesStockService {
           np.mensaje,
           np.faltante_id,
           DATE_FORMAT(np.fecha_creacion, '%d/%m/%Y %H:%i') as fecha_creacion,
+          DATE_FORMAT(np.fecha_envio_programada, '%d/%m/%Y') as fecha_programada,
           
           -- Información del faltante relacionado
           f.faltante_estado,
@@ -34,16 +35,27 @@ export class NotificacionesStockService {
         WHERE np.estado = 'pendiente' 
         AND np.tipo_notificacion = 'email'
         AND np.destinatario_email IS NOT NULL
+        AND (
+          np.fecha_envio_programada IS NULL OR 
+          np.fecha_envio_programada <= CURDATE()
+        )
         ORDER BY np.fecha_creacion ASC
         LIMIT 10
       `);
       
       if (pendientes.length === 0) {
-        console.log('✅ No hay notificaciones pendientes para enviar');
+        console.log('✅ No hay notificaciones pendientes para enviar hoy');
+        console.log(`📅 Fecha actual: ${new Date().toLocaleDateString()}`);
         return { enviadas: 0, errores: 0 };
       }
       
-      console.log(`📨 Notificaciones pendientes: ${pendientes.length}`);
+      console.log(`📨 Notificaciones pendientes para hoy: ${pendientes.length}`);
+      console.log(`📅 Fecha de procesamiento: ${new Date().toLocaleDateString()}`);
+      
+      // Log detallado de cada notificación
+      pendientes.forEach((notif, index) => {
+        console.log(`  ${index + 1}. ${notif.asunto} - Programada: ${notif.fecha_programada || 'Inmediata'}`);
+      });
       
       let enviadas = 0;
       let errores = 0;
