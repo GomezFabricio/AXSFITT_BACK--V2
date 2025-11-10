@@ -329,11 +329,19 @@ export class StockService {
           s.stock_maximo,
           s.ubicacion,
           
-          -- Nombre del producto construido
+          -- Nombre completo de la variante con valores
+          GROUP_CONCAT(vv.valor_nombre SEPARATOR ', ') as valores_variante,
+          
+          -- Nombre del producto construido con variantes reales
           CASE 
             WHEN f.faltante_producto_id IS NOT NULL THEN p.producto_nombre
             WHEN f.faltante_variante_id IS NOT NULL THEN 
-              CONCAT(p2.producto_nombre, ' (Variante ', f.faltante_variante_id, ')')
+              CASE 
+                WHEN GROUP_CONCAT(vv.valor_nombre SEPARATOR ', ') IS NOT NULL THEN
+                  CONCAT(p2.producto_nombre, ' - ', GROUP_CONCAT(vv.valor_nombre SEPARATOR ', '))
+                ELSE
+                  CONCAT(p2.producto_nombre, ' (Sin variantes)')
+              END
             ELSE 'Producto no identificado'
           END AS producto_nombre,
           
@@ -346,7 +354,7 @@ export class StockService {
           END AS estado_stock,
           
           -- Información de notificaciones relacionadas
-          COUNT(np.id) as notificaciones_enviadas
+          COUNT(DISTINCT np.id) as notificaciones_enviadas
           
         FROM faltantes f
         
@@ -357,6 +365,9 @@ export class StockService {
         LEFT JOIN variantes v ON f.faltante_variante_id = v.variante_id
         LEFT JOIN productos p2 ON v.producto_id = p2.producto_id
         
+        -- Join con valores de variantes para obtener nombres reales
+        LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id
+        
         -- Join con stock actual
         LEFT JOIN stock s ON (
           (f.faltante_producto_id IS NOT NULL AND s.producto_id = f.faltante_producto_id) OR
@@ -366,7 +377,12 @@ export class StockService {
         -- Join con notificaciones pendientes para saber si ya se notificó
         LEFT JOIN notificaciones_pendientes np ON np.faltante_id = f.faltante_id
         
-        GROUP BY f.faltante_id
+        GROUP BY f.faltante_id, f.faltante_fecha_deteccion, f.faltante_cantidad_original, 
+                 f.faltante_cantidad_faltante, f.faltante_cantidad_solicitada, f.faltante_estado, 
+                 f.faltante_resuelto, f.faltante_producto_id, f.faltante_variante_id, 
+                 f.faltante_pedido_id, p.producto_nombre, p2.producto_nombre, 
+                 v.variante_id, v.variante_precio_venta, v.variante_sku,
+                 s.cantidad, s.stock_minimo, s.stock_maximo, s.ubicacion
         
         ORDER BY 
           f.faltante_resuelto ASC,

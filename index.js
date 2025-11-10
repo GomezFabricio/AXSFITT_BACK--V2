@@ -90,7 +90,7 @@ app.listen(PORT, () => {
         }
     }, 5000);
 
-    // 🔄 PROCESAMIENTO AUTOMÁTICO DE NOTIFICACIONES CADA 5 MINUTOS
+    // 🔄 PROCESAMIENTO AUTOMÁTICO DE NOTIFICACIONES CADA 15 SEGUNDOS
     setInterval(async () => {
         try {
             console.log('\n⏰ [' + new Date().toLocaleString() + '] Verificando notificaciones pendientes...');
@@ -108,7 +108,7 @@ app.listen(PORT, () => {
         } catch (error) {
             console.error('💥 Error en procesamiento automático de notificaciones:', error);
         }
-    }, 5 * 60 * 1000); // Cada 5 minutos (300,000 ms)
+    }, 15 * 1000); // Cada 15 segundos
 
-    console.log('⏲️ Procesamiento automático de notificaciones configurado (cada 5 minutos)');
+    console.log('⏲️ Procesamiento automático de notificaciones configurado (cada 15 segundos)');
 });
