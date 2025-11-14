@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Servidor: 127.0.0.1
--- Tiempo de generación: 07-11-2025 a las 00:56:16
+-- Tiempo de generación: 14-11-2025 a las 03:32:21
 -- Versión del servidor: 10.4.32-MariaDB
--- Versión de PHP: 8.0.30
+-- Versión de PHP: 8.2.12
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -25,6 +25,100 @@ DELIMITER $$
 --
 -- Procedimientos
 --
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_agrupar_notificaciones_pendientes` ()   BEGIN
+          DECLARE done INT DEFAULT FALSE;
+          DECLARE v_fecha_envio DATE;
+          DECLARE v_tipo_frecuencia VARCHAR(20);
+          DECLARE v_count INT;
+          
+          DECLARE cur_grupos CURSOR FOR
+              SELECT fecha_envio_programada, tipo_frecuencia, COUNT(*) as cantidad
+              FROM notificaciones_pendientes 
+              WHERE estado = 'pendiente' 
+              AND tipo_frecuencia IN ('diaria', 'semanal')
+              AND fecha_envio_programada <= CURDATE()
+              GROUP BY fecha_envio_programada, tipo_frecuencia
+              HAVING COUNT(*) > 1;
+              
+          DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+          
+          OPEN cur_grupos;
+          
+          read_loop: LOOP
+              FETCH cur_grupos INTO v_fecha_envio, v_tipo_frecuencia, v_count;
+              IF done THEN
+                  LEAVE read_loop;
+              END IF;
+              
+              -- Crear notificación agrupada con formato legible
+              INSERT INTO notificaciones_pendientes (
+                  tipo_notificacion,
+                  destinatario_email,
+                  destinatario_nombre,
+                  asunto,
+                  mensaje,
+                  tipo_frecuencia,
+                  fecha_envio_programada,
+                  estado,
+                  fecha_creacion
+              )
+              SELECT 
+                  'email',
+                  'fabricio.gomez4371@gmail.com',
+                  'Administrador Sistema',
+                  CONCAT('📋 Resumen ', v_tipo_frecuencia, ': ', v_count, ' productos con faltantes'),
+                  CONCAT(
+                      '📋 RESUMEN ', UPPER(v_tipo_frecuencia), ' DE FALTANTES\n',
+                      '═════════════════════════════════════════════════════════\n\n',
+                      '📅 Fecha del reporte: ', DATE_FORMAT(v_fecha_envio, '%d de %M de %Y'), '\n',
+                      '📊 Total de productos afectados: ', v_count, '\n\n',
+                      '📦 PRODUCTOS CON FALTANTES:\n',
+                      '─────────────────────────────────────────────────\n',
+                      GROUP_CONCAT(
+                          CONCAT(
+                              '• ', 
+                              -- Extraer solo el nombre del producto del asunto (sin el emoji y "Faltante:")
+                              TRIM(SUBSTRING_INDEX(asunto, 'Faltante: ', -1)),
+                              '\n   Cantidad faltante: ', 
+                              -- Extraer cantidad del mensaje
+                              TRIM(SUBSTRING_INDEX(
+                                  SUBSTRING_INDEX(mensaje, 'Cantidad faltante: ', -1),
+                                  ' unidades', 1
+                              )), ' unidades'
+                          ) 
+                          SEPARATOR '\n\n'
+                      ),
+                      '\n\n🔔 RESUMEN EJECUTIVO:\n',
+                      '─────────────────────────────────────────────\n',
+                      '⚠️ Se detectaron múltiples faltantes en el inventario durante el período.\n',
+                      '📈 Es recomendable revisar los niveles de stock de estos productos.\n',
+                      '🔄 Considere contactar a los proveedores correspondientes.\n',
+                      '📊 Revise el panel de administración para detalles específicos.\n\n',
+                      '═════════════════════════════════════════════════════════\n',
+                      '⏰ Reporte generado automáticamente el ', DATE_FORMAT(NOW(), '%d/%m/%Y a las %H:%i'), '\n',
+                      '🏢 Sistema de gestión AXSFITT'
+                  ),
+                  CONCAT(v_tipo_frecuencia, '_agrupado'),
+                  v_fecha_envio,
+                  'pendiente',
+                  NOW()
+              FROM notificaciones_pendientes 
+              WHERE estado = 'pendiente' 
+              AND tipo_frecuencia = v_tipo_frecuencia
+              AND fecha_envio_programada = v_fecha_envio;
+              
+              -- Marcar individuales como agrupadas
+              UPDATE notificaciones_pendientes 
+              SET estado = 'agrupado'
+              WHERE estado = 'pendiente' 
+              AND tipo_frecuencia = v_tipo_frecuencia
+              AND fecha_envio_programada = v_fecha_envio;
+              
+          END LOOP;
+          
+          CLOSE cur_grupos;
+      END$$
+
 CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_procesar_notificaciones_stock` ()   BEGIN
         DECLARE done INT DEFAULT FALSE;
         DECLARE v_faltante_id INT;
@@ -322,8 +416,151 @@ CREATE TABLE `faltantes` (
 --
 
 INSERT INTO `faltantes` (`faltante_id`, `faltante_producto_id`, `faltante_variante_id`, `faltante_fecha_deteccion`, `faltante_cantidad_original`, `faltante_cantidad_faltante`, `faltante_cantidad_solicitada`, `faltante_estado`, `faltante_pedido_id`, `faltante_resuelto`) VALUES
-(1, NULL, 2, '2025-11-06 22:00:12', 5, 1, 0, 'resuelto', NULL, 1),
-(3, NULL, 2, '2025-11-06 22:17:16', 4, 2, 0, 'resuelto', NULL, 1);
+(47, NULL, 2, '2025-11-07 04:35:05', 8, 12, 0, 'resuelto', NULL, 1),
+(48, NULL, 1, '2025-11-07 07:49:30', 11, 7, 0, 'resuelto', NULL, 1),
+(49, NULL, 1, '2025-11-07 07:54:05', 11, 7, 0, 'resuelto', NULL, 1),
+(50, NULL, 1, '2025-11-10 07:39:05', 11, 7, 0, 'resuelto', NULL, 1),
+(51, NULL, 1, '2025-11-10 07:46:19', 11, 8, 0, 'resuelto', NULL, 1),
+(53, NULL, 1, '2025-11-10 08:01:51', 11, 8, 0, 'resuelto', NULL, 1),
+(71, NULL, 1, '2025-11-13 22:53:33', 11, 8, 0, 'resuelto', NULL, 1),
+(72, 2, NULL, '2025-11-13 22:56:44', 17, 33, 0, 'resuelto', NULL, 1),
+(73, NULL, 1, '2025-11-14 00:18:07', 11, 8, 0, 'resuelto', NULL, 1),
+(74, 2, NULL, '2025-11-14 00:22:52', 17, 33, 0, 'resuelto', NULL, 1),
+(75, 2, NULL, '2025-11-14 00:50:21', 17, 33, 0, 'resuelto', NULL, 1),
+(76, NULL, 1, '2025-11-14 00:55:28', 11, 8, 0, 'detectado', NULL, 0),
+(77, NULL, 2, '2025-11-14 00:55:31', 8, 12, 0, 'detectado', NULL, 0),
+(78, 2, NULL, '2025-11-14 00:55:35', 17, 33, 0, 'detectado', NULL, 0);
+
+--
+-- Disparadores `faltantes`
+--
+DELIMITER $$
+CREATE TRIGGER `trg_notificacion_faltante_completo` AFTER INSERT ON `faltantes` FOR EACH ROW BEGIN
+          DECLARE config_activo_val INT DEFAULT 0;
+          DECLARE config_frecuencia_val VARCHAR(20) DEFAULT 'inmediata';
+          DECLARE config_hora_envio_val TIME DEFAULT '09:00:00';
+          
+          DECLARE producto_nombre_completo VARCHAR(800) DEFAULT '';
+          DECLARE fecha_envio_calculada DATE DEFAULT NULL;
+          DECLARE mensaje_detallado TEXT DEFAULT '';
+          DECLARE asunto_legible VARCHAR(255) DEFAULT '';
+          
+          -- Obtener configuración de notificaciones
+          SELECT config_activo, IFNULL(config_frecuencia, 'inmediata'), 
+                 IFNULL(config_hora_envio, '09:00:00')
+          INTO config_activo_val, config_frecuencia_val, config_hora_envio_val
+          FROM notificaciones_config 
+          WHERE config_tipo = 'email' AND config_activo = 1
+          LIMIT 1;
+          
+          -- Solo procesar si las notificaciones están activas
+          IF config_activo_val = 1 THEN
+              
+              -- OBTENER NOMBRE COMPLETO DEL PRODUCTO CON VARIANTE
+              IF NEW.faltante_variante_id IS NOT NULL THEN
+                  -- Producto con variante: "Whey Protein - Sabor: Vainilla"
+                  SELECT 
+                      CONCAT(
+                          TRIM(p.producto_nombre),
+                          ' - ',
+                          GROUP_CONCAT(
+                              CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) 
+                              SEPARATOR ', '
+                          )
+                      )
+                  INTO producto_nombre_completo
+                  FROM variantes v
+                  LEFT JOIN productos p ON v.producto_id = p.producto_id
+                  LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id
+                  LEFT JOIN atributos a ON vv.atributo_id = a.atributo_id
+                  WHERE v.variante_id = NEW.faltante_variante_id
+                  GROUP BY v.variante_id;
+                  
+              ELSEIF NEW.faltante_producto_id IS NOT NULL THEN
+                  -- Producto sin variante: solo nombre del producto
+                  SELECT TRIM(producto_nombre) 
+                  INTO producto_nombre_completo
+                  FROM productos 
+                  WHERE producto_id = NEW.faltante_producto_id;
+              END IF;
+              
+              -- Si no se pudo obtener nombre, usar descripción genérica
+              IF producto_nombre_completo IS NULL OR producto_nombre_completo = '' THEN
+                  SET producto_nombre_completo = 'Producto no identificado';
+              END IF;
+              
+              -- Calcular fecha de envío según configuración
+              CASE config_frecuencia_val
+                  WHEN 'inmediata' THEN
+                      SET fecha_envio_calculada = CURDATE();
+                  WHEN 'diaria' THEN
+                      IF TIME(NOW()) <= config_hora_envio_val THEN
+                          SET fecha_envio_calculada = CURDATE();
+                      ELSE
+                          SET fecha_envio_calculada = DATE_ADD(CURDATE(), INTERVAL 1 DAY);
+                      END IF;
+                  WHEN 'semanal' THEN
+                      SET fecha_envio_calculada = DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY);
+                  ELSE
+                      SET fecha_envio_calculada = CURDATE();
+              END CASE;
+              
+              -- Crear asunto legible sin IDs
+              SET asunto_legible = CONCAT('? Faltante: ', producto_nombre_completo);
+              
+              -- Crear mensaje detallado legible
+              SET mensaje_detallado = CONCAT(
+                  '? ALERTA DE STOCK\n',
+                  '════════════════════════════════════════\n\n',
+                  '? PRODUCTO AFECTADO:\n',
+                  '   ', producto_nombre_completo, '\n\n',
+                  '? INFORMACIÓN DEL FALTANTE:\n',
+                  '   • Cantidad faltante: ', NEW.faltante_cantidad_faltante, ' unidades\n',
+                  '   • Cantidad original: ', NEW.faltante_cantidad_original, ' unidades\n',
+                  '   • Estado: ', UPPER(NEW.faltante_estado), '\n',
+                  '   • Detectado: ', DATE_FORMAT(NEW.faltante_fecha_deteccion, '%d/%m/%Y a las %H:%i'), '\n\n',
+                  '⚠️ IMPACTO:\n',
+                  '   El stock de este producto ha disminuido por debajo del nivel esperado.\n',
+                  '   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n',
+                  '? ACCIONES RECOMENDADAS:\n',
+                  '   • Verificar stock físico del producto\n',
+                  '   • Revisar pedidos pendientes\n',
+                  '   • Contactar al proveedor si es necesario\n',
+                  '   • Actualizar niveles de stock mínimo\n\n',
+                  '═══════════════════════════════════════\n',
+                  '⏰ Notificación generada automáticamente por el sistema AXSFITT\n',
+                  '? Para consultas, contacte al administrador del sistema.'
+              );
+              
+              -- Insertar notificación con nombres legibles
+              INSERT INTO notificaciones_pendientes (
+                  tipo_notificacion,
+                  destinatario_email,
+                  destinatario_nombre,
+                  asunto,
+                  mensaje,
+                  faltante_id,
+                  tipo_frecuencia,
+                  fecha_envio_programada,
+                  estado,
+                  fecha_creacion
+              ) VALUES (
+                  'email',
+                  'fabricio.gomez4371@gmail.com',
+                  'Administrador Sistema',
+                  asunto_legible,
+                  mensaje_detallado,
+                  NEW.faltante_id,
+                  config_frecuencia_val,
+                  fecha_envio_calculada,
+                  'pendiente',
+                  NOW()
+              );
+              
+          END IF;
+      END
+$$
+DELIMITER ;
 
 -- --------------------------------------------------------
 
@@ -343,11 +580,11 @@ CREATE TABLE `imagenes_productos` (
 --
 
 INSERT INTO `imagenes_productos` (`imagen_id`, `producto_id`, `imagen_url`, `imagen_orden`) VALUES
-(8, 2, '/uploads/1758302581230-978212042-15.png', 0),
-(9, 2, '/uploads/1758302581238-272173220-16.png', 1),
-(10, 1, '/uploads/1758302499461-79695005-1.png', 0),
-(11, 1, '/uploads/1758302499473-419007522-2.png', 1),
-(12, 1, '/uploads/1758302499482-797443712-4.png', 2);
+(25, 1, '/uploads/1758302499461-79695005-1.png', 0),
+(26, 1, '/uploads/1758302499473-419007522-2.png', 1),
+(27, 1, '/uploads/1758302499482-797443712-4.png', 2),
+(28, 2, '/uploads/1758302581230-978212042-15.png', 0),
+(29, 2, '/uploads/1758302581238-272173220-16.png', 1);
 
 -- --------------------------------------------------------
 
@@ -396,18 +633,14 @@ INSERT INTO `modulos` (`modulo_id`, `modulo_padre_id`, `modulo_descripcion`) VAL
 
 CREATE TABLE `notificaciones_config` (
   `config_id` int(10) UNSIGNED NOT NULL,
+  `config_usuario_id` int(10) UNSIGNED NOT NULL,
   `config_tipo` enum('email','whatsapp','sms') NOT NULL,
   `config_activo` tinyint(1) DEFAULT 1,
-  `config_destinatarios` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`config_destinatarios`)),
-  `config_template` text DEFAULT NULL,
-  `config_umbral_notificacion` int(10) UNSIGNED DEFAULT 1,
-  `config_frecuencia_horas` int(10) UNSIGNED DEFAULT 24,
   `config_fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
   `config_fecha_actualizacion` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `config_frecuencia` enum('inmediata','diaria','semanal') DEFAULT 'inmediata',
   `config_hora_envio` time DEFAULT '09:00:00',
   `config_dias_semana` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT '["1"]' COMMENT 'Array de días de la semana (1=Lunes, 7=Domingo)' CHECK (json_valid(`config_dias_semana`)),
-  `config_umbral_cantidad` int(11) DEFAULT 5 COMMENT 'Cantidad mínima para generar notificación',
   `config_plantilla_personalizada` text DEFAULT NULL COMMENT 'Plantilla personalizada de mensaje'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -415,8 +648,9 @@ CREATE TABLE `notificaciones_config` (
 -- Volcado de datos para la tabla `notificaciones_config`
 --
 
-INSERT INTO `notificaciones_config` (`config_id`, `config_tipo`, `config_activo`, `config_destinatarios`, `config_template`, `config_umbral_notificacion`, `config_frecuencia_horas`, `config_fecha_creacion`, `config_fecha_actualizacion`, `config_frecuencia`, `config_hora_envio`, `config_dias_semana`, `config_umbral_cantidad`, `config_plantilla_personalizada`) VALUES
-(1, 'email', 1, '[\"fabricio.gomez4371@gmail.com\"]', '🚨 ALERTA DE STOCK BAJO - AXSFITT\n\nSe han detectado productos con stock por debajo del mínimo.\n\nPor favor, revise el sistema y genere los pedidos correspondientes.', 1, 6, '2025-11-06 18:28:41', '2025-11-06 21:56:13', 'inmediata', '09:00:00', '[\"1\",\"2\",\"3\",\"4\",\"5\"]', 5, NULL);
+INSERT INTO `notificaciones_config` (`config_id`, `config_usuario_id`, `config_tipo`, `config_activo`, `config_fecha_creacion`, `config_fecha_actualizacion`, `config_frecuencia`, `config_hora_envio`, `config_dias_semana`, `config_plantilla_personalizada`) VALUES
+(1, 1, 'email', 1, '2025-11-06 18:28:41', '2025-11-14 00:54:33', 'diaria', '22:00:00', '[\"4\"]', 'Notificacion diaria de prueba'),
+(3, 1, 'whatsapp', 0, '2025-11-07 05:44:29', '2025-11-07 05:48:57', 'inmediata', '09:00:00', '[\"1\",\"2\",\"3\",\"4\",\"5\"]', NULL);
 
 -- --------------------------------------------------------
 
@@ -441,9 +675,8 @@ CREATE TABLE `notificaciones_contactos` (
 --
 
 INSERT INTO `notificaciones_contactos` (`contacto_id`, `contacto_nombre`, `contacto_email`, `contacto_telefono`, `contacto_activo`, `contacto_tipo`, `fecha_creacion`, `fecha_modificacion`, `contacto_avatar`) VALUES
-(5, 'fabricio gomez', 'fabricio.gomez4371@gmail.com', '', 1, 'email', '2025-11-06 21:29:05', '2025-11-06 21:55:14', NULL),
-(7, 'Pedro Martinez', 'pedro.martinez@empresa.com', '+5491187654321', 1, 'email', '2025-11-06 21:37:10', '2025-11-06 21:52:40', NULL),
-(8, 'Ana Rodriguez', 'ana.rodriguez@empresa.com', '+5491123456789', 1, 'whatsapp', '2025-11-06 21:37:10', '2025-11-06 21:37:10', NULL);
+(5, 'fabricio gomez', 'fabricio.gomez4371@gmail.com', '', 1, 'email', '2025-11-06 21:29:05', '2025-11-07 05:20:44', NULL),
+(7, 'Pedro Martinez', 'pedro.martinez@empresa.com', '+5491187654321', 1, 'email', '2025-11-06 21:37:10', '2025-11-07 05:20:44', NULL);
 
 -- --------------------------------------------------------
 
@@ -460,9 +693,11 @@ CREATE TABLE `notificaciones_pendientes` (
   `asunto` varchar(255) DEFAULT NULL,
   `mensaje` text DEFAULT NULL,
   `faltante_id` int(11) DEFAULT NULL,
+  `tipo_frecuencia` enum('inmediata','diaria','semanal','diaria_agrupado','semanal_agrupado') DEFAULT 'inmediata',
   `fecha_creacion` timestamp NOT NULL DEFAULT current_timestamp(),
   `fecha_envio` timestamp NULL DEFAULT NULL,
-  `estado` enum('pendiente','enviado','error') DEFAULT 'pendiente',
+  `fecha_envio_programada` date DEFAULT NULL,
+  `estado` enum('pendiente','enviado','error','agrupado') DEFAULT 'pendiente',
   `error_mensaje` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -470,10 +705,35 @@ CREATE TABLE `notificaciones_pendientes` (
 -- Volcado de datos para la tabla `notificaciones_pendientes`
 --
 
-INSERT INTO `notificaciones_pendientes` (`id`, `tipo_notificacion`, `destinatario_email`, `destinatario_nombre`, `destinatario_telefono`, `asunto`, `mensaje`, `faltante_id`, `fecha_creacion`, `fecha_envio`, `estado`, `error_mensaje`) VALUES
-(1, 'email', 'fabricio.gomez4371@gmail.com', 'fabricio gomez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL),
-(2, 'email', 'pedro.martinez@empresa.com', 'Pedro Martinez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL),
-(3, 'email', 'ana.rodriguez@empresa.com', 'Ana Rodriguez', NULL, 'ALERTA: Stock bajo - Whey Protein  (ID: 2)', 'Se ha detectado stock bajo en el siguiente producto:\n\nProducto: Whey Protein  (ID: 2)\nStock actual: 5\nStock mínimo: 6\nCantidad faltante: 1\n\nSe recomienda realizar un pedido lo antes posible.\n\nSistema de Gestión AXSFITT', 1, '2025-11-06 22:15:16', NULL, 'pendiente', NULL);
+INSERT INTO `notificaciones_pendientes` (`id`, `tipo_notificacion`, `destinatario_email`, `destinatario_nombre`, `destinatario_telefono`, `asunto`, `mensaje`, `faltante_id`, `tipo_frecuencia`, `fecha_creacion`, `fecha_envio`, `fecha_envio_programada`, `estado`, `error_mensaje`) VALUES
+(23, 'email', 'fabricio.gomez4371@gmail.com', NULL, NULL, '🚨 ALERTA: Nuevo faltante detectado', 'Se ha detectado un nuevo faltante en el inventario.\n\nDetalles:\n• ID: 52\n• Cantidad faltante: 5 unidades\n• Estado: detectado\n• Fecha: 2025-11-10 04:59:38\n\nIngrese al sistema para revisar los detalles y generar pedidos.\n\nSistema AXSFITT', 52, 'inmediata', '2025-11-10 07:59:38', '2025-11-10 08:03:50', NULL, 'enviado', NULL),
+(24, 'email', 'fabricio.gomez4371@gmail.com', NULL, NULL, '🚨 ALERTA: Nuevo faltante detectado', 'Se ha detectado un nuevo faltante en el inventario.\n\nDetalles:\n• ID: 53\n• Cantidad faltante: 8 unidades\n• Estado: detectado\n• Fecha: 2025-11-10 05:01:51\n\nIngrese al sistema para revisar los detalles y generar pedidos.\n\nSistema AXSFITT', 53, 'inmediata', '2025-11-10 08:01:51', '2025-11-10 08:03:54', NULL, 'enviado', NULL),
+(25, 'email', 'fabricio.gomez4371@gmail.com', NULL, NULL, '🚨 STOCK BAJO: Whey Protein  - Vainilla', '🚨 ALERTA DE STOCK BAJO\n\n📦 PRODUCTO: Whey Protein  - Vainilla\n📊 CANTIDAD FALTANTE: 8 unidades\n⚠️ ESTADO: detectado\n📅 FECHA DETECCIÓN: 10/11/2025 05:16\n🔢 ID FALTANTE: 54\n\n📌 ACCIÓN REQUERIDA:\n• Revise el inventario del producto\n• Genere un pedido al proveedor si es necesario\n• Actualice el stock mínimo si corresponde\n\n🌐 Acceda al sistema para más detalles y gestionar pedidos.\n\n---\nSistema AXSFITT - Gestión de Inventario\nNotificación automática generada el 2025-11-10 05:16:08', 54, 'inmediata', '2025-11-10 08:16:08', '2025-11-10 08:16:40', '2025-11-10', 'enviado', NULL),
+(26, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 diaria - Faltante: Whey Protein ', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Whey Protein \n📊 CANTIDAD FALTANTE: 8 unidades\n📈 CANTIDAD ORIGINAL: 25 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:42\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #56\n🏷️  ID Producto: 1\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 56, 'diaria', '2025-11-13 21:42:14', '2025-11-14 00:38:28', '2025-11-14', 'enviado', NULL),
+(27, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 diaria - Faltante: Whey Protein ', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Whey Protein \n📊 CANTIDAD FALTANTE: 5 unidades\n📈 CANTIDAD ORIGINAL: 20 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:43\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #57\n🏷️  ID Producto: 1\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 57, 'diaria', '2025-11-13 21:43:58', NULL, '2025-11-13', 'agrupado', NULL),
+(28, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 diaria - Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Creatina Monohidratada\n📊 CANTIDAD FALTANTE: 7 unidades\n📈 CANTIDAD ORIGINAL: 25 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:43\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #58\n🏷️  ID Producto: 2\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 58, 'diaria', '2025-11-13 21:43:58', NULL, '2025-11-13', 'agrupado', NULL),
+(29, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 diaria - Faltante: Whey Protein ', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Whey Protein \n📊 CANTIDAD FALTANTE: 9 unidades\n📈 CANTIDAD ORIGINAL: 30 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:43\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #59\n🏷️  ID Producto: 1\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 59, 'diaria', '2025-11-13 21:43:58', NULL, '2025-11-13', 'agrupado', NULL),
+(30, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 diaria - Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Creatina Monohidratada\n📊 CANTIDAD FALTANTE: 11 unidades\n📈 CANTIDAD ORIGINAL: 35 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:43\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #60\n🏷️  ID Producto: 2\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 60, 'diaria', '2025-11-13 21:43:58', NULL, '2025-11-13', 'agrupado', NULL),
+(31, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '📋 Resumen diaria de faltantes (4 productos)', '📋 RESUMEN DE FALTANTES - DIARIA\n═══════════════════════════════════════\n📅 Fecha del reporte: 13/11/2025\n📊 Total de productos con faltantes: 4\n\n📦 DETALLE DE FALTANTES:\n────────────────────────────\n• Whey Protein  - CANTIDAD FALTANTE: 5 unidades\n• Creatina Monohidratada - CANTIDAD FALTANTE: 7 unidades\n• Whey Protein  - CANTIDAD FALTANTE: 9 unidades\n• Creatina Monohidratada - CANTIDAD FALTANTE: 11 unidades\n\n⚠️ Es necesario revisar el stock de estos productos.\n🔄 Reporte generado automáticamente por el sistema.\n📧 Para más detalles, revise el panel de administración.', NULL, 'diaria_agrupado', '2025-11-13 21:43:59', '2025-11-13 21:44:03', '2025-11-13', 'enviado', NULL),
+(32, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 inmediata - Faltante: Whey Protein ', '🚨 ALERTA DE STOCK\n═══════════════════════════════════\n\n📦 PRODUCTO: Whey Protein \n📊 CANTIDAD FALTANTE: 3 unidades\n📈 CANTIDAD ORIGINAL: 15 unidades\n⚠️  ESTADO: DETECTADO\n📅 DETECTADO: 13/11/2025 a las 18:44\n\n🔍 DETALLES TÉCNICOS:\n────────────────────────────────\n🆔 ID Faltante: #61\n🏷️  ID Producto: 1\n🎯 ID Variante: N/A\n\n📋 ACCIONES RECOMENDADAS:\n────────────────────────────────\n• Verificar stock físico del producto\n• Contactar al proveedor si es necesario\n• Actualizar cantidad en el sistema\n• Revisar configuración de stock mínimo\n\n⏰ Este mensaje fue generado automáticamente por el sistema de gestión de stock.\n📞 Para consultas, contacte al administrador del sistema.', 61, 'inmediata', '2025-11-13 21:44:03', '2025-11-13 21:44:08', '2025-11-13', 'enviado', NULL),
+(33, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 5 unidades\n   • Cantidad original: 25 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:18\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 62, 'inmediata', '2025-11-13 22:18:13', '2025-11-13 22:18:23', '2025-11-13', 'enviado', NULL),
+(34, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 3 unidades\n   • Cantidad original: 20 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:18\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 63, 'inmediata', '2025-11-13 22:18:13', '2025-11-13 22:18:25', '2025-11-13', 'enviado', NULL),
+(35, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 8 unidades\n   • Cantidad original: 50 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:23\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 64, 'inmediata', '2025-11-13 22:23:28', '2025-11-13 22:23:32', '2025-11-13', 'enviado', NULL),
+(36, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 5 unidades\n   • Cantidad original: 30 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:23\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 65, 'inmediata', '2025-11-13 22:23:28', '2025-11-13 22:23:35', '2025-11-13', 'enviado', NULL),
+(37, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 15 unidades\n   • Cantidad original: 100 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:36\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 66, 'inmediata', '2025-11-13 22:36:59', '2025-11-13 22:37:04', '2025-11-13', 'enviado', NULL),
+(38, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 12 unidades\n   • Cantidad original: 80 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:36\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 67, 'inmediata', '2025-11-13 22:36:59', '2025-11-13 22:37:07', '2025-11-13', 'enviado', NULL),
+(39, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Frutilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Frutilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 8 unidades\n   • Cantidad original: 75 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:36\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 68, 'diaria', '2025-11-13 22:36:59', NULL, '2025-11-13', 'agrupado', NULL),
+(40, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 5 unidades\n   • Cantidad original: 60 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:36\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 69, 'diaria', '2025-11-13 22:36:59', NULL, '2025-11-13', 'agrupado', NULL),
+(41, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 18 unidades\n   • Cantidad original: 90 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:36\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 70, 'diaria', '2025-11-13 22:36:59', NULL, '2025-11-13', 'agrupado', NULL),
+(42, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '📋 Resumen diaria: 3 productos con faltantes', '📋 RESUMEN DIARIA DE FALTANTES\n═════════════════════════════════════════════════════════\n\n📅 Fecha del reporte: 13 de November de 2025\n📊 Total de productos afectados: 3\n\n📦 PRODUCTOS CON FALTANTES:\n─────────────────────────────────────────────────\n• Whey Protein - Sabor: Frutilla\n   Cantidad faltante: 8 unidades\n\n• Creatina Monohidratada\n   Cantidad faltante: 5 unidades\n\n• Whey Protein - Sabor: Vainilla\n   Cantidad faltante: 18 unidades\n\n🔔 RESUMEN EJECUTIVO:\n─────────────────────────────────────────────\n⚠️ Se detectaron múltiples faltantes en el inventario durante el período.\n📈 Es recomendable revisar los niveles de stock de estos productos.\n🔄 Considere contactar a los proveedores correspondientes.\n📊 Revise el panel de administración para detalles específicos.\n\n═════════════════════════════════════════════════════════\n⏰ Reporte generado automáticamente el 13/11/2025 a las 19:36\n🏢 Sistema de gestión AXSFITT', NULL, 'diaria_agrupado', '2025-11-13 22:36:59', '2025-11-13 22:37:10', '2025-11-13', 'enviado', NULL),
+(43, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 8 unidades\n   • Cantidad original: 11 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 19:53\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 71, 'inmediata', '2025-11-13 22:53:33', '2025-11-13 22:53:46', '2025-11-13', 'enviado', NULL),
+(44, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 8 unidades\n   • Cantidad original: 11 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:18\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 73, 'diaria', '2025-11-14 00:18:07', '2025-11-14 00:36:41', '2025-11-13', 'enviado', NULL),
+(45, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 33 unidades\n   • Cantidad original: 17 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:22\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 74, 'inmediata', '2025-11-14 00:22:52', '2025-11-14 00:22:59', '2025-11-13', 'enviado', NULL),
+(46, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 33 unidades\n   • Cantidad original: 17 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:50\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 75, 'diaria', '2025-11-14 00:50:21', '2025-11-14 00:50:36', '2025-11-14', 'enviado', NULL),
+(47, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Vainilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Vainilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 8 unidades\n   • Cantidad original: 11 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:55\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 76, 'diaria', '2025-11-14 00:55:28', NULL, '2025-11-13', 'agrupado', NULL),
+(48, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Whey Protein - Sabor: Frutilla', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Whey Protein - Sabor: Frutilla\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 12 unidades\n   • Cantidad original: 8 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:55\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 77, 'diaria', '2025-11-14 00:55:31', NULL, '2025-11-13', 'agrupado', NULL),
+(49, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '🚨 Faltante: Creatina Monohidratada', '🚨 ALERTA DE STOCK\n════════════════════════════════════════\n\n📦 PRODUCTO AFECTADO:\n   Creatina Monohidratada\n\n📊 INFORMACIÓN DEL FALTANTE:\n   • Cantidad faltante: 33 unidades\n   • Cantidad original: 17 unidades\n   • Estado: DETECTADO\n   • Detectado: 13/11/2025 a las 21:55\n\n⚠️ IMPACTO:\n   El stock de este producto ha disminuido por debajo del nivel esperado.\n   Se recomienda revisar el inventario y contactar al proveedor si es necesario.\n\n📋 ACCIONES RECOMENDADAS:\n   • Verificar stock físico del producto\n   • Revisar pedidos pendientes\n   • Contactar al proveedor si es necesario\n   • Actualizar niveles de stock mínimo\n\n═══════════════════════════════════════\n⏰ Notificación generada automáticamente por el sistema AXSFITT\n📞 Para consultas, contacte al administrador del sistema.', 78, 'diaria', '2025-11-14 00:55:35', NULL, '2025-11-13', 'agrupado', NULL),
+(50, 'email', 'fabricio.gomez4371@gmail.com', 'Administrador Sistema', NULL, '📋 Resumen diaria: 3 productos con faltantes', '📋 RESUMEN DIARIA DE FALTANTES\n═════════════════════════════════════════════════════════\n\n📅 Fecha del reporte: 13 de November de 2025\n📊 Total de productos afectados: 3\n\n📦 PRODUCTOS CON FALTANTES:\n─────────────────────────────────────────────────\n• Whey Protein - Sabor: Vainilla\n   Cantidad faltante: 8 unidades\n\n• Whey Protein - Sabor: Frutilla\n   Cantidad faltante: 12 unidades\n\n• Creatina Monohidratada\n   Cantidad faltante: 33 unidades\n\n🔔 RESUMEN EJECUTIVO:\n─────────────────────────────────────────────\n⚠️ Se detectaron múltiples faltantes en el inventario durante el período.\n📈 Es recomendable revisar los niveles de stock de estos productos.\n🔄 Considere contactar a los proveedores correspondientes.\n📊 Revise el panel de administración para detalles específicos.\n\n═════════════════════════════════════════════════════════\n⏰ Reporte generado automáticamente el 13/11/2025 a las 21:55\n🏢 Sistema de gestión AXSFITT', NULL, 'diaria_agrupado', '2025-11-14 00:55:39', '2025-11-14 00:55:42', '2025-11-13', 'enviado', NULL);
 
 -- --------------------------------------------------------
 
@@ -882,49 +1142,63 @@ CREATE TABLE `stock` (
 --
 
 INSERT INTO `stock` (`stock_id`, `producto_id`, `variante_id`, `cantidad`, `ubicacion`, `fecha_actualizacion`, `stock_minimo`, `stock_maximo`) VALUES
-(1, NULL, 1, 10, NULL, '2025-09-19 17:24:06', 8, 15),
-(2, NULL, 2, 8, NULL, '2025-11-06 23:40:36', 6, 20),
-(3, 2, NULL, 10, NULL, '2025-09-19 17:24:48', 8, 15),
+(1, NULL, 1, 11, NULL, '2025-11-14 00:55:28', 12, 19),
+(2, NULL, 2, 8, NULL, '2025-11-14 00:55:31', 9, 20),
+(3, 2, NULL, 17, NULL, '2025-11-14 00:55:35', 18, 50),
 (4, 1, NULL, 0, NULL, '2025-11-06 23:40:36', 0, NULL);
 
 --
 -- Disparadores `stock`
 --
 DELIMITER $$
-CREATE TRIGGER `trg_detectar_faltante_update` AFTER UPDATE ON `stock` FOR EACH ROW BEGIN
-          IF NEW.cantidad < NEW.stock_minimo AND OLD.cantidad >= OLD.stock_minimo THEN
-              IF NOT EXISTS (
-                  SELECT 1 FROM faltantes 
-                  WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
-                  AND faltante_estado IN ('detectado', 'registrado', 'solicitado_parcial', 'solicitado_completo', 'pedido_generado', 'en_transito')
-              ) THEN
-                  INSERT INTO faltantes (
-                      faltante_producto_id,
-                      faltante_variante_id,
-                      faltante_cantidad_original,
-                      faltante_cantidad_faltante,
-                      faltante_estado
-                  ) VALUES (
-                      NEW.producto_id,
-                      NEW.variante_id,
-                      NEW.cantidad,
-                      NEW.stock_minimo - NEW.cantidad,
-                      'detectado'
-                  );
-              END IF;
-          END IF;
-      END
-$$
-DELIMITER ;
-DELIMITER $$
-CREATE TRIGGER `trg_resolver_faltante_stock_update` AFTER UPDATE ON `stock` FOR EACH ROW BEGIN
-          IF NEW.cantidad >= NEW.stock_minimo AND OLD.cantidad < OLD.stock_minimo THEN
-              UPDATE faltantes 
-              SET faltante_estado = 'resuelto', 
-                  faltante_resuelto = 1
-              WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
-              AND faltante_estado IN ('detectado', 'registrado', 'solicitado_parcial', 'solicitado_completo');
-          END IF;
+CREATE TRIGGER `trg_stock_faltantes_final` AFTER UPDATE ON `stock` FOR EACH ROW BEGIN
+        DECLARE faltante_existe INT DEFAULT 0;
+        DECLARE debe_haber_faltante BOOLEAN DEFAULT FALSE;
+        
+        -- Determinar si DEBE haber faltante
+        SET debe_haber_faltante = (NEW.cantidad < NEW.stock_minimo);
+        
+        -- Contar faltantes activos
+        SELECT COUNT(*) INTO faltante_existe
+        FROM faltantes 
+        WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
+        AND faltante_resuelto = 0;
+        
+        IF debe_haber_faltante AND faltante_existe = 0 THEN
+          -- CREAR faltante nuevo
+          INSERT INTO faltantes (
+            faltante_producto_id,
+            faltante_variante_id,
+            faltante_cantidad_original,
+            faltante_cantidad_faltante,
+            faltante_estado,
+            faltante_fecha_deteccion
+          ) VALUES (
+            NEW.producto_id,
+            NEW.variante_id,
+            NEW.cantidad,  -- Stock actual
+            NEW.stock_maximo - NEW.cantidad,
+            'detectado',
+            NOW()
+          );
+          
+        ELSEIF NOT debe_haber_faltante AND faltante_existe > 0 THEN
+          -- RESOLVER faltante existente
+          UPDATE faltantes 
+          SET faltante_estado = 'resuelto', 
+              faltante_resuelto = 1
+          WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
+          AND faltante_resuelto = 0;
+          
+        ELSEIF debe_haber_faltante AND faltante_existe > 0 THEN
+          -- ACTUALIZAR faltante existente
+          -- ¡IMPORTANTE! Actualizar AMBOS campos
+          UPDATE faltantes 
+          SET faltante_cantidad_original = NEW.cantidad,     -- SIEMPRE el stock actual
+              faltante_cantidad_faltante = NEW.stock_maximo - NEW.cantidad
+          WHERE (faltante_producto_id = NEW.producto_id OR faltante_variante_id = NEW.variante_id)
+          AND faltante_resuelto = 0;
+        END IF;
       END
 $$
 DELIMITER ;
@@ -1030,8 +1304,8 @@ CREATE TABLE `variantes` (
 --
 
 INSERT INTO `variantes` (`variante_id`, `producto_id`, `imagen_id`, `variante_precio_venta`, `variante_precio_costo`, `variante_precio_oferta`, `variante_sku`, `variante_estado`) VALUES
-(1, 1, 10, 25000.00, 21000.00, 23000.00, NULL, 'activo'),
-(2, 1, 11, 26500.00, 21000.00, NULL, NULL, 'activo');
+(1, 1, 25, 25000.00, 21000.00, 23000.00, NULL, 'activo'),
+(2, 1, 26, 26500.00, 21000.00, NULL, NULL, 'activo');
 
 -- --------------------------------------------------------
 
@@ -1211,7 +1485,8 @@ ALTER TABLE `modulos`
 -- Indices de la tabla `notificaciones_config`
 --
 ALTER TABLE `notificaciones_config`
-  ADD PRIMARY KEY (`config_id`);
+  ADD PRIMARY KEY (`config_id`),
+  ADD UNIQUE KEY `uk_usuario_tipo` (`config_usuario_id`,`config_tipo`);
 
 --
 -- Indices de la tabla `notificaciones_contactos`
@@ -1454,13 +1729,13 @@ ALTER TABLE `estados_usuarios`
 -- AUTO_INCREMENT de la tabla `faltantes`
 --
 ALTER TABLE `faltantes`
-  MODIFY `faltante_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `faltante_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=79;
 
 --
 -- AUTO_INCREMENT de la tabla `imagenes_productos`
 --
 ALTER TABLE `imagenes_productos`
-  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `imagen_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
 
 --
 -- AUTO_INCREMENT de la tabla `imagenes_temporales`
@@ -1478,7 +1753,7 @@ ALTER TABLE `modulos`
 -- AUTO_INCREMENT de la tabla `notificaciones_config`
 --
 ALTER TABLE `notificaciones_config`
-  MODIFY `config_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `config_id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- AUTO_INCREMENT de la tabla `notificaciones_contactos`
@@ -1490,7 +1765,7 @@ ALTER TABLE `notificaciones_contactos`
 -- AUTO_INCREMENT de la tabla `notificaciones_pendientes`
 --
 ALTER TABLE `notificaciones_pendientes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=51;
 
 --
 -- AUTO_INCREMENT de la tabla `pedidos`
@@ -1667,6 +1942,12 @@ ALTER TABLE `imagenes_productos`
 --
 ALTER TABLE `modulos`
   ADD CONSTRAINT `modulos_ibfk_1` FOREIGN KEY (`modulo_padre_id`) REFERENCES `modulos` (`modulo_id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+
+--
+-- Filtros para la tabla `notificaciones_config`
+--
+ALTER TABLE `notificaciones_config`
+  ADD CONSTRAINT `notificaciones_config_ibfk_1` FOREIGN KEY (`config_usuario_id`) REFERENCES `usuarios` (`usuario_id`) ON DELETE CASCADE;
 
 --
 -- Filtros para la tabla `pedidos`

@@ -22,6 +22,7 @@ import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
 import ProveedoresRoutesRefactorizado from './routes/proveedores.routes.refactorizado.js';
 import PedidosRoutesRefactorizado from './routes/pedidos.routes.refactorizado.js';
 import NotificacionesRoutes from './routes/notificaciones.routes.js';
+import NotificacionesListaRoutes from './routes/notificaciones-lista.routes.js';
 import NotificacionesStockService from './services/notificaciones-stock.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +53,7 @@ app.use('/api/ventas-v2', VentasRoutesRefactorizado); // Nueva versión refactor
 app.use('/api/proveedores-v2', ProveedoresRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/pedidos-v2', PedidosRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/notificaciones', NotificacionesRoutes); // Gestión de notificaciones
+app.use('/api/notificaciones', NotificacionesListaRoutes); // Lista de notificaciones
 
 app.get('/', (req, res) => {
     res.send('Servidor funcionando correctamente');
