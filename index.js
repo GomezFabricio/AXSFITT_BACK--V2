@@ -21,6 +21,7 @@ import VentasRoutes from './routes/ventas.routes.js';
 import VentasRoutesRefactorizado from './routes/ventas.routes.refactorizado.js';
 import ProveedoresRoutesRefactorizado from './routes/proveedores.routes.refactorizado.js';
 import PedidosRoutesRefactorizado from './routes/pedidos.routes.refactorizado.js';
+import CarritoPedidosRoutes from './routes/carrito-pedidos.routes.js';
 import NotificacionesRoutes from './routes/notificaciones.routes.js';
 import NotificacionesListaRoutes from './routes/notificaciones-lista.routes.js';
 import NotificacionesStockService from './services/notificaciones-stock.service.js';
@@ -52,6 +53,7 @@ app.use('/api/ventas', VentasRoutes);
 app.use('/api/ventas-v2', VentasRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/proveedores-v2', ProveedoresRoutesRefactorizado); // Nueva versión refactorizada
 app.use('/api/pedidos-v2', PedidosRoutesRefactorizado); // Nueva versión refactorizada
+app.use('/api/carrito-pedidos', CarritoPedidosRoutes); // Carrito de pedido rápido
 app.use('/api/notificaciones', NotificacionesRoutes); // Gestión de notificaciones
 app.use('/api/notificaciones', NotificacionesListaRoutes); // Lista de notificaciones
 

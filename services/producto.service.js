@@ -48,14 +48,16 @@ class ProductoService {
         v.imagen_id,
         ip.imagen_url,
         COALESCE(s.cantidad, 0) AS stock_total,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
       FROM variantes v
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
       WHERE v.producto_id = ?
-      GROUP BY v.variante_id, ip.imagen_url, v.variante_estado
+      GROUP BY v.variante_id, v.variante_precio_venta, v.variante_precio_oferta, 
+               v.variante_precio_costo, v.variante_sku, v.variante_estado, 
+               v.imagen_id, ip.imagen_url, s.cantidad
     `
   };
 
@@ -651,6 +653,14 @@ class ProductoService {
 
   static async actualizarVariantesProducto(conn, id, variantes, producto_stock) {
     if (variantes.length === 0) {
+      // Eliminar historial de precios de todas las variantes del producto
+      await conn.query(`
+        DELETE FROM precios_historicos 
+        WHERE ph_variante_id IN (
+          SELECT variante_id FROM variantes WHERE producto_id = ?
+        )
+      `, [id]);
+      
       // Eliminar todas las variantes
       await conn.query('DELETE FROM variantes WHERE producto_id = ?', [id]);
       return;
@@ -660,6 +670,15 @@ class ProductoService {
     const varianteIdsEnviadas = variantes.map(v => v.variante_id).filter(Boolean);
     
     if (varianteIdsEnviadas.length > 0) {
+      // Eliminar historial de precios de variantes no enviadas
+      await conn.query(`
+        DELETE FROM precios_historicos 
+        WHERE ph_variante_id IN (
+          SELECT variante_id FROM variantes 
+          WHERE producto_id = ? AND variante_id NOT IN (?)
+        )
+      `, [id, varianteIdsEnviadas]);
+      
       // Eliminar variantes no enviadas
       await conn.query(
         'DELETE FROM variantes WHERE producto_id = ? AND variante_id NOT IN (?)',

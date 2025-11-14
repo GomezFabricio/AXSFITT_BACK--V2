@@ -78,7 +78,7 @@ export class VentaService {
         vd.variante_id,
         v.variante_sku,
         COALESCE(
-          GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', '), 
+          GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', '), 
           vd.variante_descripcion
         ) AS variante_descripcion,
         ip.imagen_url
@@ -178,7 +178,7 @@ export class VentaService {
         v.variante_sku,
         COALESCE(s.cantidad, 0) AS stock,
         ip.imagen_url,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS descripcion
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS descripcion
       FROM variantes v
       LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
@@ -552,7 +552,7 @@ export class VentaService {
           const [varianteInfo] = await conn.query(
             `SELECT 
               p.producto_nombre,
-              GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') as descripcion
+              GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') as descripcion
              FROM variantes v
              JOIN productos p ON v.producto_id = p.producto_id
              LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id

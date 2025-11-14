@@ -104,7 +104,7 @@ export class StockService {
         s.stock_maximo,
         f.faltante_cantidad_faltante,
         ip.imagen_url,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
         'variante' AS tipo,
         f.faltante_id,
         f.faltante_fecha_deteccion
@@ -168,7 +168,7 @@ export class StockService {
           ELSE s.stock_minimo - COALESCE(s.cantidad, 0) 
         END) AS cantidad_faltante,
         ip.imagen_url,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
         'variante' AS tipo,
         NULL as id_faltante,
         NULL as fecha_deteccion

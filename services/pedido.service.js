@@ -40,7 +40,7 @@ class PedidoService {
         v.variante_precio_venta, v.variante_precio_costo,
         v.variante_sku, v.variante_id,
         (
-          SELECT GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ')
+          SELECT GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ')
           FROM valores_variantes vv
           JOIN atributos a ON vv.atributo_id = a.atributo_id
           WHERE vv.variante_id = d.pd_variante_id
@@ -682,10 +682,25 @@ class PedidoService {
             );
           } else {
             console.log('📦 Actualizando stock de producto:', producto_id);
-            await conn.query(
-              'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?', 
-              [producto_id, item.cantidad_recibida, item.cantidad_recibida]
+            // Verificar si ya existe stock para este producto
+            const [existeStock] = await conn.query(
+              'SELECT stock_id, cantidad FROM stock WHERE producto_id = ? AND variante_id IS NULL',
+              [producto_id]
             );
+            
+            if (existeStock.length > 0) {
+              // Actualizar stock existente
+              await conn.query(
+                'UPDATE stock SET cantidad = cantidad + ? WHERE stock_id = ?',
+                [item.cantidad_recibida, existeStock[0].stock_id]
+              );
+            } else {
+              // Crear nuevo registro de stock
+              await conn.query(
+                'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)',
+                [producto_id, item.cantidad_recibida]
+              );
+            }
           }
 
           // Crear movimiento de stock
@@ -992,47 +1007,100 @@ class PedidoService {
         
         // Procesar cada variante del producto borrador
         for (const variante of variantes) {
-          console.log('🆕 Creando variante de producto borrador:', variante);
+          console.log('🆕 Procesando variante de producto borrador:', variante);
           
-          // Crear variante inactiva
-          let resVar = await conn.query(
-            'INSERT INTO variantes (producto_id, variante_estado, variante_precio_costo) VALUES (?, ?, ?)', 
-            [producto_id, 'inactivo', variante.precio_unitario || variante.precio || 0]
-          );
-          let variante_id = resVar[0].insertId;
-
-          // Crear atributos y valores de variante
-          if (variante.atributos && typeof variante.atributos === 'object') {
-            for (const [atributo_nombre, valor_nombre] of Object.entries(variante.atributos)) {
-              // Buscar o crear atributo
-              let [atributoExistente] = await conn.query('SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?', 
-                [producto_id, atributo_nombre]);
+          let variante_id;
+          let varianteExiste = false;
+          
+          // ✅ VERIFICAR SI YA EXISTE UNA VARIANTE CON LOS MISMOS ATRIBUTOS
+          if (variante.atributos && typeof variante.atributos === 'object' && Object.keys(variante.atributos).length > 0) {
+            console.log('🔍 Verificando si variante ya existe con atributos:', variante.atributos);
+            
+            // Construir query para verificar variante existente
+            const atributoEntries = Object.entries(variante.atributos);
+            const atributoConditions = atributoEntries.map(() => 
+              'EXISTS (SELECT 1 FROM valores_variantes vv JOIN atributos a ON vv.atributo_id = a.atributo_id WHERE vv.variante_id = v.variante_id AND a.atributo_nombre = ? AND vv.valor_nombre = ?)'
+            ).join(' AND ');
+            
+            const queryParams = [];
+            atributoEntries.forEach(([atributo, valor]) => {
+              queryParams.push(atributo, valor);
+            });
+            
+            const varianteQuery = `
+              SELECT v.variante_id, v.variante_precio_costo
+              FROM variantes v
+              WHERE v.producto_id = ? 
+              AND (
+                SELECT COUNT(*)
+                FROM valores_variantes vv
+                WHERE vv.variante_id = v.variante_id
+              ) = ?
+              AND ${atributoConditions}
+            `;
+            
+            const [variantesExistentes] = await conn.query(varianteQuery, [producto_id, atributoEntries.length, ...queryParams]);
+            
+            if (variantesExistentes.length > 0) {
+              variante_id = variantesExistentes[0].variante_id;
+              varianteExiste = true;
+              console.log(`✅ Variante existente encontrada: ${variante_id} - reutilizando`);
               
-              let atributo_id;
-              if (atributoExistente.length > 0) {
-                atributo_id = atributoExistente[0].atributo_id;
-              } else {
-                let resAttr = await conn.query('INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)', 
-                  [producto_id, atributo_nombre]);
-                atributo_id = resAttr[0].insertId;
+              // Actualizar precio si es diferente
+              const precioNuevo = variante.precio_unitario || variante.precio || 0;
+              const precioAnterior = variantesExistentes[0].variante_precio_costo;
+              
+              if (precioNuevo !== precioAnterior) {
+                await conn.query('UPDATE variantes SET variante_precio_costo = ? WHERE variante_id = ?', 
+                  [precioNuevo, variante_id]);
+                console.log(`💰 Precio actualizado de ${precioAnterior} a ${precioNuevo}`);
               }
-
-              // Crear valor de variante
-              await conn.query(
-                'INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)',
-                [variante_id, atributo_id, valor_nombre]
-              );
             }
           }
+          
+          // Solo crear nueva variante si no existe
+          if (!varianteExiste) {
+            console.log('🆕 Creando nueva variante');
+            let resVar = await conn.query(
+              'INSERT INTO variantes (producto_id, variante_estado, variante_precio_costo) VALUES (?, ?, ?)', 
+              [producto_id, 'inactivo', variante.precio_unitario || variante.precio || 0]
+            );
+            variante_id = resVar[0].insertId;
 
-          // Crear stock para la variante
+            // Crear atributos y valores de variante SOLO para variantes nuevas
+            if (variante.atributos && typeof variante.atributos === 'object') {
+              for (const [atributo_nombre, valor_nombre] of Object.entries(variante.atributos)) {
+                // Buscar o crear atributo
+                let [atributoExistente] = await conn.query('SELECT atributo_id FROM atributos WHERE producto_id = ? AND atributo_nombre = ?', 
+                  [producto_id, atributo_nombre]);
+                
+                let atributo_id;
+                if (atributoExistente.length > 0) {
+                  atributo_id = atributoExistente[0].atributo_id;
+                } else {
+                  let resAttr = await conn.query('INSERT INTO atributos (producto_id, atributo_nombre) VALUES (?, ?)', 
+                    [producto_id, atributo_nombre]);
+                  atributo_id = resAttr[0].insertId;
+                }
+
+                // Crear valor de variante
+                await conn.query(
+                  'INSERT INTO valores_variantes (variante_id, atributo_id, valor_nombre) VALUES (?, ?, ?)',
+                  [variante_id, atributo_id, valor_nombre]
+                );
+              }
+            }
+            console.log(`✅ Nueva variante creada: ${variante_id}`);
+          }
+
+          // ✅ ACTUALIZAR STOCK (para variantes existentes y nuevas)
           await conn.query(
             'INSERT INTO stock (variante_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?',
             [variante_id, variante.cantidad || 0, variante.cantidad || 0]
           );
-          console.log(`📦 Stock creado para variante: ${variante.cantidad || 0} unidades`);
+          console.log(`📦 Stock actualizado para variante: +${variante.cantidad || 0} unidades`);
 
-          // Registrar precio en historial
+          // ✅ REGISTRAR CAMBIO DE PRECIO EN HISTORIAL (para variantes existentes y nuevas)
           await conn.query(`
             INSERT INTO precios_historicos (
               ph_producto_id, ph_variante_id, ph_precio_costo_anterior, ph_precio_costo_nuevo,
@@ -1041,30 +1109,50 @@ class PedidoService {
           `, [
             producto_id,
             variante_id,
-            null,
+            varianteExiste ? null : null, // Para variantes nuevas, precio anterior es null
             variante.precio_unitario || variante.precio || 0,
             'recepcion_pedido',
             pedido_id,
             usuario_id,
-            `Migración de variante de producto borrador: ${pb.pbp_nombre} - ${JSON.stringify(variante.atributos || {})}`
+            `${varianteExiste ? 'Actualización de' : 'Migración de'} variante de producto borrador: ${pb.pbp_nombre} - ${JSON.stringify(variante.atributos || {})}`
           ]);
         }
       } else {
         // ✅ CREAR STOCK PARA EL PRODUCTO (solo si NO tiene variantes)
         if (productosExistentes.length === 0) {
-          // Solo para productos nuevos, crear stock inicial
-          await conn.query(
-            'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?',
-            [producto_id, pb.pbp_cantidad, pb.pbp_cantidad]
+          // Solo para productos nuevos, verificar y crear stock inicial
+          const [existeStock] = await conn.query(
+            'SELECT stock_id FROM stock WHERE producto_id = ? AND variante_id IS NULL',
+            [producto_id]
           );
-          console.log(`📦 Stock inicial para producto creado: ${pb.pbp_cantidad} unidades`);
+          
+          if (existeStock.length === 0) {
+            await conn.query(
+              'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)',
+              [producto_id, pb.pbp_cantidad]
+            );
+            console.log(`📦 Stock inicial para producto creado: ${pb.pbp_cantidad} unidades`);
+          }
         } else {
-          // Para productos existentes, sumar stock
-          await conn.query(
-            'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?) ON DUPLICATE KEY UPDATE cantidad = cantidad + ?',
-            [producto_id, pb.pbp_cantidad, pb.pbp_cantidad]
+          // Para productos existentes, verificar y sumar stock
+          const [existeStock] = await conn.query(
+            'SELECT stock_id, cantidad FROM stock WHERE producto_id = ? AND variante_id IS NULL',
+            [producto_id]
           );
-          console.log(`📦 Stock agregado a producto existente: +${pb.pbp_cantidad} unidades`);
+          
+          if (existeStock.length > 0) {
+            await conn.query(
+              'UPDATE stock SET cantidad = cantidad + ? WHERE stock_id = ?',
+              [pb.pbp_cantidad, existeStock[0].stock_id]
+            );
+            console.log(`📦 Stock agregado a producto existente: +${pb.pbp_cantidad} unidades`);
+          } else {
+            await conn.query(
+              'INSERT INTO stock (producto_id, cantidad) VALUES (?, ?)',
+              [producto_id, pb.pbp_cantidad]
+            );
+            console.log(`📦 Stock inicial creado para producto existente: ${pb.pbp_cantidad} unidades`);
+          }
         }
       }
 
