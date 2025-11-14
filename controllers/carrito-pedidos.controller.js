@@ -309,6 +309,106 @@ export const vaciarCarrito = async (req, res) => {
 };
 
 /**
+ * POST /api/carrito-pedidos/carrito/agregar-todos
+ * Agregar todos los faltantes pendientes al carrito
+ */
+export const agregarTodosFaltantes = async (req, res) => {
+  try {
+    console.log('🔄 [CARRITO] Agregando todos los faltantes al carrito para usuario:', req.user.usuario_id);
+    
+    const usuario_id = req.user.usuario_id;
+
+    // Obtener todos los faltantes disponibles
+    const [faltantes] = await pool.query(`
+      SELECT DISTINCT
+        f.faltante_id,
+        f.faltante_producto_id,
+        f.faltante_variante_id,
+        f.faltante_cantidad_faltante,
+        COALESCE(p.producto_nombre, p2.producto_nombre) as producto_nombre,
+        v.variante_sku,
+        v.variante_precio_venta,
+        GROUP_CONCAT(
+          CONCAT(a.atributo_nombre, ': ', vv.valor_nombre)
+          SEPARATOR ', '
+        ) as atributos,
+        COALESCE(s.cantidad, 0) as stock_actual
+      FROM faltantes f
+      LEFT JOIN productos p ON f.faltante_producto_id = p.producto_id
+      LEFT JOIN variantes v ON f.faltante_variante_id = v.variante_id
+      LEFT JOIN productos p2 ON v.producto_id = p2.producto_id  
+      LEFT JOIN stock s ON f.faltante_variante_id = s.variante_id
+      LEFT JOIN valores_variantes vv ON v.variante_id = vv.variante_id
+      LEFT JOIN atributos a ON vv.atributo_id = a.atributo_id
+      WHERE f.faltante_estado IN ('detectado', 'pendiente')
+        AND f.faltante_resuelto = 0
+        AND f.faltante_cantidad_faltante > 0
+      GROUP BY 
+        f.faltante_id, 
+        f.faltante_producto_id, 
+        f.faltante_variante_id,
+        f.faltante_cantidad_faltante,
+        p.producto_nombre, 
+        p2.producto_nombre,
+        v.variante_sku, 
+        v.variante_precio_venta, 
+        s.cantidad
+      ORDER BY f.faltante_fecha_deteccion DESC
+    `);
+
+    if (faltantes.length === 0) {
+      return ApiResponse.success(res, { items: [], proveedor_id: null }, 'No hay faltantes disponibles para agregar');
+    }
+
+    // Obtener carrito actual
+    let carrito = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    
+    // Agregar cada faltante al carrito
+    let itemsAgregados = 0;
+    for (const faltante of faltantes) {
+      const faltanteKey = faltante.faltante_variante_id 
+        ? `variante_${faltante.faltante_variante_id}` 
+        : `producto_${faltante.faltante_producto_id}`;
+
+      // Verificar si ya existe en el carrito
+      const existeItem = carrito.items.find(item => item.item_key === faltanteKey);
+      
+      if (!existeItem) {
+        const nuevoItem = {
+          item_key: faltanteKey,
+          faltante_id: faltante.faltante_id,
+          producto_id: faltante.faltante_producto_id || null,
+          variante_id: faltante.faltante_variante_id || null,
+          producto_nombre: faltante.producto_nombre || 'Producto desconocido',
+          variante_sku: faltante.variante_sku || null,
+          atributos: faltante.atributos || 'Sin atributos',
+          cantidad: faltante.faltante_cantidad_faltante,
+          precio: faltante.variante_precio_venta || 0,
+          precio_estimado: faltante.variante_precio_venta || 0,
+          stock_actual: faltante.stock_actual || 0,
+          es_critico: (faltante.stock_actual || 0) === 0,
+          fecha_agregado: new Date().toISOString()
+        };
+
+        carrito.items.push(nuevoItem);
+        itemsAgregados++;
+      }
+    }
+
+    // Guardar carrito actualizado
+    carritosSesiones.set(usuario_id, carrito);
+
+    console.log(`✅ [CARRITO] Se agregaron ${itemsAgregados} faltantes al carrito. Total items: ${carrito.items.length}`);
+    
+    return ApiResponse.success(res, carrito, `Se agregaron ${itemsAgregados} faltantes al carrito exitosamente`);
+
+  } catch (error) {
+    console.error('❌ [CARRITO] Error al agregar todos los faltantes:', error);
+    return ApiResponse.error(res, 'Error al agregar todos los faltantes al carrito', 500);
+  }
+};
+
+/**
  * POST /api/carrito-pedidos/carrito/confirmar
  * Confirmar pedido: Crear pedido en BD y actualizar faltantes
  */
@@ -317,28 +417,54 @@ export const confirmarPedido = async (req, res) => {
   
   try {
     console.log('🎯 [CARRITO] Confirmando pedido para usuario:', req.user.usuario_id);
+    console.log('🎯 [CARRITO] Total de sesiones en memoria:', carritosSesiones.size);
+    console.log('🎯 [CARRITO] Todas las sesiones:', Array.from(carritosSesiones.keys()));
     
     await connection.beginTransaction();
     
     const usuario_id = req.user.usuario_id;
     const carrito = carritosSesiones.get(usuario_id);
 
-    // Validaciones
-    if (!carrito || carrito.items.length === 0) {
+    console.log('🔍 [DEBUG] Estado del carrito al inicio de confirmar:', {
+      existe: !!carrito,
+      items: carrito?.items?.length || 0,
+      proveedor_id: carrito?.proveedor_id || null,
+      carrito_completo: carrito
+    });
+
+    // Validaciones con logs detallados
+    if (!carrito) {
+      await connection.rollback();
+      console.log('❌ [CARRITO] Validación fallida: carrito no existe en sesión');
+      console.log('❌ [CARRITO] Sesiones disponibles:', Array.from(carritosSesiones.keys()));
+      return ApiResponse.error(res, 'El carrito no existe en la sesión', 400);
+    }
+    
+    if (!carrito.items || carrito.items.length === 0) {
+      await connection.rollback();
+      console.log('❌ [CARRITO] Validación fallida: carrito sin items');
       return ApiResponse.error(res, 'El carrito está vacío', 400);
     }
 
     if (!carrito.proveedor_id) {
+      await connection.rollback();
+      console.log('❌ [CARRITO] Validación fallida: sin proveedor');
       return ApiResponse.error(res, 'Debe seleccionar un proveedor', 400);
     }
 
     // 1️⃣ Crear registro de pedido principal
     const pedidoFecha = new Date();
+    console.log('📝 [CARRITO] Insertando pedido con:', {
+      proveedor_id: carrito.proveedor_id,
+      usuario_id,
+      fecha: pedidoFecha
+    });
+
     const [pedidoResult] = await connection.query(`
       INSERT INTO pedidos (
         pedido_proveedor_id,
         pedido_usuario_id,
-        pedido_fecha,
+        pedido_fecha_pedido,
         pedido_estado,
         pedido_total,
         pedido_observaciones
@@ -352,72 +478,78 @@ export const confirmarPedido = async (req, res) => {
 
     // 2️⃣ Procesar cada item del carrito
     for (const item of carrito.items) {
-      // Crear detalle del pedido
-      const [detalleResult] = await connection.query(`
-        INSERT INTO pedidos_detalle (
-          detalle_pedido_id,
-          detalle_variante_id,
-          detalle_cantidad,
-          detalle_precio_unitario,
-          detalle_subtotal
-        ) VALUES (?, ?, ?, ?, ?)
-      `, [
-        pedido_id,
-        item.variante_id,
-        item.cantidad_pedida,
-        item.precio_unitario,
-        item.subtotal
-      ]);
+      console.log('🔍 [DEBUG] Procesando item:', {
+        item_key: item.item_key,
+        variante_id: item.variante_id,
+        cantidad: item.cantidad,
+        precio: item.precio,
+        faltante_id: item.faltante_id
+      });
 
-      totalPedido += item.subtotal;
+      // Calcular subtotal
+      const subtotal = (item.precio || 0) * (item.cantidad || 0);
+      
+      // Solo insertar si hay variante_id
+      if (item.variante_id) {
+        // Crear detalle del pedido
+        const [detalleResult] = await connection.query(`
+          INSERT INTO pedidos_detalle (
+            pd_pedido_id,
+            pd_variante_id,
+            pd_cantidad_pedida,
+            pd_precio_unitario,
+            pd_subtotal
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [
+          pedido_id,
+          item.variante_id,
+          item.cantidad,
+          item.precio,
+          subtotal
+        ]);
+
+        console.log('✅ [CARRITO] Detalle insertado para variante:', item.variante_id);
+      } else if (item.producto_id) {
+        // Si no hay variante_id pero hay producto_id, insertar con producto
+        const [detalleResult] = await connection.query(`
+          INSERT INTO pedidos_detalle (
+            pd_pedido_id,
+            pd_producto_id,
+            pd_cantidad_pedida,
+            pd_precio_unitario,
+            pd_subtotal
+          ) VALUES (?, ?, ?, ?, ?)
+        `, [
+          pedido_id,
+          item.producto_id,
+          item.cantidad,
+          item.precio,
+          subtotal
+        ]);
+
+        console.log('✅ [CARRITO] Detalle insertado para producto:', item.producto_id);
+      }
+
+      totalPedido += subtotal;
 
       // 3️⃣ Actualizar estado del faltante a 'pedido_realizado'
-      await connection.query(`
-        UPDATE faltantes 
-        SET 
-          faltante_estado = 'pedido_realizado',
-          faltante_pedido_id = ?,
-          faltante_fecha_resolucion = NOW()
-        WHERE faltante_id = ? AND faltante_variante_id = ?
-      `, [pedido_id, item.faltante_id, item.variante_id]);
+      if (item.faltante_id) {
+        await connection.query(`
+          UPDATE faltantes 
+          SET 
+            faltante_estado = 'pedido_realizado',
+            faltante_pedido_id = ?,
+            faltante_cantidad_solicitada = COALESCE(faltante_cantidad_solicitada, 0) + ?
+          WHERE faltante_id = ?
+        `, [pedido_id, item.cantidad, item.faltante_id]);
 
-      // 4️⃣ Crear notificación de pedido realizado
-      await connection.query(`
-        INSERT INTO notificaciones_pendientes (
-          notificacion_tipo,
-          notificacion_titulo,
-          notificacion_mensaje,
-          notificacion_datos,
-          notificacion_usuario_objetivo,
-          notificacion_fecha_creacion,
-          notificacion_estado,
-          notificacion_prioridad
-        ) VALUES (
-          'pedido_realizado',
-          'Pedido Realizado',
-          ?,
-          ?,
-          ?,
-          NOW(),
-          'pendiente',
-          'media'
-        )
-      `, [
-        `Se ha creado el pedido #${pedido_id} para resolver el faltante de ${item.producto_nombre} (${item.cantidad_pedida} unidades)`,
-        JSON.stringify({
-          pedido_id: pedido_id,
-          faltante_id: item.faltante_id,
-          producto_nombre: item.producto_nombre,
-          cantidad: item.cantidad_pedida,
-          proveedor_id: carrito.proveedor_id
-        }),
-        usuario_id
-      ]);
+        console.log('✅ [CARRITO] Faltante actualizado:', item.faltante_id);
+      }
 
-      console.log(`✅ [CARRITO] Procesado item: ${item.producto_nombre} x${item.cantidad_pedida}`);
+      console.log(`✅ [CARRITO] Procesado item: ${item.producto_nombre} x${item.cantidad} - Subtotal: $${subtotal}`);
     }
 
-    // 5️⃣ Actualizar total del pedido
+    // 4️⃣ Actualizar total del pedido
     await connection.query(`
       UPDATE pedidos 
       SET pedido_total = ? 
@@ -426,8 +558,8 @@ export const confirmarPedido = async (req, res) => {
 
     await connection.commit();
 
-    // 6️⃣ Limpiar carrito después de confirmar
-    carritosSesiones.delete(usuario_id);
+    // 5️⃣ NO limpiar carrito inmediatamente - mantenerlo para debug
+    console.log('🎯 [CARRITO] Manteniendo carrito para debug');
 
     const pedidoFinal = {
       pedido_id: pedido_id,
@@ -436,7 +568,7 @@ export const confirmarPedido = async (req, res) => {
       pedido_total: totalPedido,
       proveedor_id: carrito.proveedor_id,
       items_procesados: carrito.items.length,
-      faltantes_resueltos: carrito.items.map(item => item.faltante_id)
+      faltantes_resueltos: carrito.items.map(item => item.faltante_id).filter(Boolean)
     };
 
     console.log('🎉 [CARRITO] Pedido confirmado exitosamente:', pedidoFinal);
@@ -445,7 +577,19 @@ export const confirmarPedido = async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error('❌ [CARRITO] Error al confirmar pedido:', error);
-    return ApiResponse.error(res, 'Error al confirmar el pedido: ' + error.message, 500);
+    console.error('❌ [CARRITO] Stack trace:', error.stack);
+    
+    // Proporcionar más detalles del error
+    let errorMessage = 'Error al confirmar el pedido';
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      errorMessage += ': Tabla no encontrada - ' + error.sqlMessage;
+    } else if (error.code === 'ER_BAD_FIELD_ERROR') {
+      errorMessage += ': Campo no válido - ' + error.sqlMessage;
+    } else if (error.message) {
+      errorMessage += ': ' + error.message;
+    }
+    
+    return ApiResponse.error(res, errorMessage, 500);
   } finally {
     connection.release();
   }
@@ -490,6 +634,35 @@ export const obtenerFaltantesDisponibles = async (req, res) => {
     console.error('❌ [CARRITO] Error al obtener faltantes:', error.message);
     console.error('❌ [CARRITO] Stack trace:', error.stack);
     return ApiResponse.error(res, 'Error al obtener faltantes disponibles', 500);
+  }
+};
+
+/**
+ * GET /api/carrito-pedidos/debug
+ * Endpoint de debug para revisar el estado del carrito
+ */
+export const debugCarrito = async (req, res) => {
+  try {
+    console.log('🔍 [DEBUG] Estado de carritosSesiones:', carritosSesiones);
+    
+    const usuario_id = req.user.usuario_id;
+    const carrito = carritosSesiones.get(usuario_id);
+    
+    const debug = {
+      usuario_id,
+      carrito_existe: !!carrito,
+      carrito_completo: carrito,
+      total_sesiones: carritosSesiones.size,
+      todas_las_sesiones: Array.from(carritosSesiones.keys()),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('🔍 [DEBUG] Estado del carrito para usuario:', debug);
+    
+    return ApiResponse.success(res, debug, 'Debug del carrito');
+  } catch (error) {
+    console.error('❌ [DEBUG] Error en debug:', error);
+    return ApiResponse.error(res, 'Error en debug', 500);
   }
 };
 

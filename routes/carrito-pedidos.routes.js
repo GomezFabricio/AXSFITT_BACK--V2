@@ -9,10 +9,12 @@ import {
   obtenerProveedores,
   seleccionarProveedor,
   vaciarCarrito,
+  agregarTodosFaltantes,
   confirmarPedido,
   obtenerFaltantesDisponibles,
   probarConexion,
-  obtenerInfoCarrito
+  obtenerInfoCarrito,
+  debugCarrito
 } from '../controllers/carrito-pedidos.controller.js';
 
 const router = express.Router();
@@ -69,6 +71,12 @@ router.put('/carrito/cantidad', actualizarCantidadCarrito);
  */
 router.delete('/carrito/vaciar', vaciarCarrito);
 
+/**
+ * POST /api/carrito-pedidos/carrito/agregar-todos
+ * Agregar todos los faltantes pendientes al carrito
+ */
+router.post('/carrito/agregar-todos', agregarTodosFaltantes);
+
 // ==================== GESTIÓN DE PROVEEDORES ====================
 
 /**
@@ -105,5 +113,11 @@ router.get('/faltantes', obtenerFaltantesDisponibles);
  * Endpoint de diagnóstico para probar conectividad
  */
 router.get('/test', probarConexion);
+
+/**
+ * GET /api/carrito-pedidos/debug
+ * Endpoint de debug para revisar estado del carrito
+ */
+router.get('/debug', debugCarrito);
 
 export default router;
