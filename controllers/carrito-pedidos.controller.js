@@ -3,463 +3,559 @@ import { pool } from '../db.js';
 
 /**
  * Controlador para gestión de Carrito de Pedido Rápido
- * Permite agregar productos/variantes faltantes a un carrito temporal
- * y generar pedidos de reposición automáticamente
+ * Integrado completamente con la estructura de BD axsfitt
+ * Respeta la lógica de faltantes, pedidos y stock existente
  */
 
-// Variable temporal para simular sesiones de carrito (en producción usar Redis o session storage)
+// Variable temporal para simular sesiones de carrito (en producción usar Redis)
 const carritosSesiones = new Map();
 
-// Obtener carrito actual de la sesión
+/**
+ * GET /api/carrito-pedidos/carrito
+ * Obtener carrito actual del usuario
+ */
 export const obtenerCarrito = async (req, res) => {
   try {
-    const usuario_id = req.user.usuario_id;
-    const carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    console.log('📄 [CARRITO] Obteniendo carrito para usuario:', req.user.usuario_id);
     
+    const usuario_id = req.user.usuario_id;
+    const carritoUsuario = carritosSesiones.get(usuario_id) || { 
+      items: [], 
+      proveedor_id: null 
+    };
+    
+    console.log('✅ [CARRITO] Carrito obtenido:', carritoUsuario);
     return ApiResponse.success(res, carritoUsuario, 'Carrito obtenido exitosamente');
   } catch (error) {
-    console.error('❌ Error al obtener carrito:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'obtener carrito');
+    console.error('❌ [CARRITO] Error al obtener carrito:', error);
+    return ApiResponse.error(res, 'Error al obtener el carrito', 500);
   }
 };
 
-// Agregar faltante al carrito
+/**
+ * POST /api/carrito-pedidos/carrito/agregar
+ * Agregar faltante al carrito
+ */
 export const agregarAlCarrito = async (req, res) => {
   try {
+    console.log('➕ [CARRITO] Agregando item al carrito:', req.body);
+    
     const usuario_id = req.user.usuario_id;
-    const { faltante_id, producto_id, variante_id, cantidad_necesaria } = req.body;
+    const { faltante_id, variante_id, cantidad } = req.body;
 
-    // Validar que se proporcione al menos producto_id o variante_id
-    if (!producto_id && !variante_id) {
-      return ApiResponse.error(res, 'Debe especificar producto_id o variante_id', 400);
+    // Validaciones básicas
+    if (!faltante_id || !variante_id) {
+      return ApiResponse.error(res, 'Se requiere faltante_id y variante_id', 400);
     }
 
-    // Obtener información del producto/variante
-    let itemInfo;
-    if (variante_id) {
-      const [rows] = await pool.query(`
-        SELECT 
-          v.variante_id,
-          p.producto_id,
-          p.producto_nombre,
-          v.variante_sku,
-          v.variante_precio_venta,
-          s.cantidad as stock_actual,
-          s.stock_minimo,
-          s.stock_maximo,
-          GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
-          ip.imagen_url
-        FROM variantes v
-        JOIN productos p ON v.producto_id = p.producto_id
-        LEFT JOIN stock s ON s.variante_id = v.variante_id
-        LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
-        LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-        LEFT JOIN imagenes_productos ip ON ip.imagen_id = v.imagen_id
-        WHERE v.variante_id = ?
-        GROUP BY v.variante_id
-      `, [variante_id]);
-      
-      if (!rows.length) {
-        return ApiResponse.error(res, 'Variante no encontrada', 404);
-      }
-      itemInfo = { ...rows[0], tipo: 'variante' };
-    } else {
-      const [rows] = await pool.query(`
-        SELECT 
-          p.producto_id,
-          p.producto_nombre,
-          s.cantidad as stock_actual,
-          s.stock_minimo,
-          s.stock_maximo,
-          ip.imagen_url
-        FROM productos p
-        LEFT JOIN stock s ON s.producto_id = p.producto_id
-        LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = 1
-        WHERE p.producto_id = ?
-      `, [producto_id]);
-      
-      if (!rows.length) {
-        return ApiResponse.error(res, 'Producto no encontrado', 404);
-      }
-      itemInfo = { ...rows[0], tipo: 'producto' };
+    // 1️⃣ Validar que el faltante exista y no esté resuelto
+    const [faltantes] = await pool.query(`
+      SELECT 
+        f.faltante_id,
+        f.faltante_variante_id,
+        f.faltante_cantidad_faltante,
+        f.faltante_estado,
+        f.faltante_fecha_deteccion
+      FROM faltantes f
+      WHERE f.faltante_id = ? 
+        AND f.faltante_variante_id = ?
+        AND f.faltante_estado IN ('detectado', 'registrado')
+    `, [faltante_id, variante_id]);
+
+    if (faltantes.length === 0) {
+      return ApiResponse.error(res, 'Faltante no encontrado o ya está resuelto', 404);
     }
 
-    // Calcular cantidad faltante si no se especifica
-    const cantidadFaltante = cantidad_necesaria || 
-      Math.max(0, itemInfo.stock_minimo - itemInfo.stock_actual);
+    const faltante = faltantes[0];
 
-    // Obtener carrito actual del usuario
-    let carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    // 2️⃣ Validar que la variante exista
+    const [variantes] = await pool.query(`
+      SELECT 
+        v.variante_id,
+        v.variante_sku,
+        v.variante_precio_venta,
+        p.producto_id,
+        p.producto_nombre,
+        s.cantidad AS stock_actual,
+        s.stock_minimo,
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
+      FROM variantes v
+      INNER JOIN productos p ON v.producto_id = p.producto_id
+      LEFT JOIN stock s ON s.variante_id = v.variante_id
+      LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
+      LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
+      WHERE v.variante_id = ?
+      GROUP BY v.variante_id
+    `, [variante_id]);
 
-    // Verificar si el item ya existe en el carrito
-    const itemKey = variante_id ? `variante_${variante_id}` : `producto_${producto_id}`;
-    const itemExistente = carritoUsuario.items.find(item => item.key === itemKey);
+    if (variantes.length === 0) {
+      return ApiResponse.error(res, 'Variante no encontrada', 404);
+    }
 
+    const variante = variantes[0];
+
+    // 3️⃣ Validar cantidad (por defecto usar la cantidad faltante)
+    const cantidadFinal = cantidad || faltante.faltante_cantidad_faltante;
+
+    if (cantidadFinal > faltante.faltante_cantidad_faltante) {
+      return ApiResponse.error(res, 'La cantidad no puede ser mayor a la cantidad faltante', 400);
+    }
+
+    // 4️⃣ Obtener carrito actual y evitar duplicados
+    const carrito = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    const itemKey = `${faltante_id}-${variante_id}`;
+    
+    // Verificar si ya existe
+    const itemExistente = carrito.items.find(item => item.item_key === itemKey);
     if (itemExistente) {
-      // Actualizar cantidad
-      itemExistente.cantidad = cantidadFaltante;
-    } else {
-      // Agregar nuevo item
-      carritoUsuario.items.push({
-        key: itemKey,
-        faltante_id,
-        producto_id: itemInfo.producto_id,
-        variante_id: variante_id || null,
-        producto_nombre: itemInfo.producto_nombre,
-        variante_sku: itemInfo.variante_sku || null,
-        atributos: itemInfo.atributos || null,
-        cantidad: cantidadFaltante,
-        stock_actual: itemInfo.stock_actual,
-        stock_minimo: itemInfo.stock_minimo,
-        imagen_url: itemInfo.imagen_url,
-        tipo: itemInfo.tipo,
-        precio_estimado: itemInfo.variante_precio_venta || 0
-      });
+      return ApiResponse.error(res, 'Este faltante ya está en el carrito', 400);
     }
 
-    // Guardar carrito actualizado
-    carritosSesiones.set(usuario_id, carritoUsuario);
+    // 5️⃣ Crear item del carrito
+    const nuevoItem = {
+      item_key: itemKey,
+      faltante_id: faltante.faltante_id,
+      variante_id: variante.variante_id,
+      producto_id: variante.producto_id,
+      producto_nombre: variante.producto_nombre,
+      variante_sku: variante.variante_sku,
+      atributos: variante.atributos,
+      cantidad_faltante: faltante.faltante_cantidad_faltante,
+      cantidad: cantidadFinal, // Frontend espera 'cantidad'
+      precio: variante.variante_precio_venta || 0, // Frontend espera 'precio'
+      precio_unitario: variante.variante_precio_venta || 0, // Mantener también para compatibilidad
+      subtotal: (variante.variante_precio_venta || 0) * cantidadFinal,
+      stock_actual: variante.stock_actual || 0,
+      fecha_agregado: new Date()
+    };
 
-    return ApiResponse.success(res, carritoUsuario, 'Producto agregado al carrito exitosamente');
+    carrito.items.push(nuevoItem);
+    carritosSesiones.set(usuario_id, carrito);
+
+    console.log('✅ [CARRITO] Item agregado exitosamente:', nuevoItem);
+    return ApiResponse.success(res, carrito, 'Producto agregado al carrito exitosamente');
+
   } catch (error) {
-    console.error('❌ Error al agregar al carrito:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'agregar al carrito');
+    console.error('❌ [CARRITO] Error al agregar al carrito:', error.message);
+    console.error('❌ [CARRITO] Stack trace:', error.stack);
+    return ApiResponse.error(res, 'Error al agregar producto al carrito', 500);
   }
 };
 
-// Quitar item del carrito
+/**
+ * DELETE /api/carrito-pedidos/carrito/quitar
+ * Quitar item del carrito
+ */
 export const quitarDelCarrito = async (req, res) => {
   try {
+    console.log('➖ [CARRITO] Quitando item del carrito:', req.body);
+    
     const usuario_id = req.user.usuario_id;
     const { item_key } = req.body;
 
-    let carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
-    
-    // Filtrar el item a eliminar
-    carritoUsuario.items = carritoUsuario.items.filter(item => item.key !== item_key);
-    
-    // Guardar carrito actualizado
-    carritosSesiones.set(usuario_id, carritoUsuario);
+    if (!item_key) {
+      return ApiResponse.error(res, 'Se requiere item_key', 400);
+    }
 
-    return ApiResponse.success(res, carritoUsuario, 'Producto eliminado del carrito exitosamente');
+    const carrito = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    const indexItem = carrito.items.findIndex(item => item.item_key === item_key);
+
+    if (indexItem === -1) {
+      return ApiResponse.error(res, 'Item no encontrado en el carrito', 404);
+    }
+
+    carrito.items.splice(indexItem, 1);
+    carritosSesiones.set(usuario_id, carrito);
+
+    console.log('✅ [CARRITO] Item quitado exitosamente:', item_key);
+    return ApiResponse.success(res, carrito, 'Producto quitado del carrito exitosamente');
+
   } catch (error) {
-    console.error('❌ Error al quitar del carrito:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'quitar del carrito');
+    console.error('❌ [CARRITO] Error al quitar del carrito:', error);
+    return ApiResponse.error(res, 'Error al quitar producto del carrito', 500);
   }
 };
 
-// Actualizar cantidad en carrito
+/**
+ * PUT /api/carrito-pedidos/carrito/cantidad
+ * Actualizar cantidad de un item en el carrito
+ */
 export const actualizarCantidadCarrito = async (req, res) => {
   try {
+    console.log('🔄 [CARRITO] Actualizando cantidad:', req.body);
+    
     const usuario_id = req.user.usuario_id;
     const { item_key, cantidad } = req.body;
 
-    if (cantidad <= 0) {
-      return ApiResponse.error(res, 'La cantidad debe ser mayor a 0', 400);
+    console.log('🔍 [DEBUG] item_key:', item_key, 'cantidad:', cantidad, 'tipo:', typeof cantidad);
+
+    if (!item_key || cantidad === null || cantidad === undefined || cantidad <= 0) {
+      return ApiResponse.error(res, 'Se requiere item_key y cantidad válida', 400);
     }
 
-    let carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
-    
-    // Buscar y actualizar el item
-    const item = carritoUsuario.items.find(item => item.key === item_key);
-    if (item) {
-      item.cantidad = cantidad;
-    } else {
+    const carrito = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    const item = carrito.items.find(item => item.item_key === item_key);
+
+    if (!item) {
       return ApiResponse.error(res, 'Item no encontrado en el carrito', 404);
     }
-    
-    // Guardar carrito actualizado
-    carritosSesiones.set(usuario_id, carritoUsuario);
 
-    return ApiResponse.success(res, carritoUsuario, 'Cantidad actualizada exitosamente');
-  } catch (error) {
-    console.error('❌ Error al actualizar cantidad:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'actualizar cantidad');
-  }
-};
-
-// Seleccionar proveedor para el carrito
-export const seleccionarProveedor = async (req, res) => {
-  try {
-    const usuario_id = req.user.usuario_id;
-    const { proveedor_id } = req.body;
-
-    // Verificar que el proveedor existe
-    const [proveedor] = await pool.query(
-      'SELECT proveedor_id, proveedor_nombre FROM proveedores WHERE proveedor_id = ? AND proveedor_estado = "activo"',
-      [proveedor_id]
-    );
-
-    if (!proveedor.length) {
-      return ApiResponse.error(res, 'Proveedor no encontrado o inactivo', 404);
+    if (cantidad > item.cantidad_faltante) {
+      return ApiResponse.error(res, 'La cantidad no puede ser mayor a la cantidad faltante', 400);
     }
 
-    let carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
-    carritoUsuario.proveedor_id = proveedor_id;
-    carritoUsuario.proveedor_nombre = proveedor[0].proveedor_nombre;
-    
-    // Guardar carrito actualizado
-    carritosSesiones.set(usuario_id, carritoUsuario);
+    item.cantidad = cantidad; // Usar 'cantidad' que espera el frontend
+    item.subtotal = item.precio * cantidad; // Usar 'precio' que espera el frontend
 
-    return ApiResponse.success(res, carritoUsuario, 'Proveedor seleccionado exitosamente');
+    carritosSesiones.set(usuario_id, carrito);
+
+    console.log('✅ [CARRITO] Cantidad actualizada:', item);
+    return ApiResponse.success(res, carrito, 'Cantidad actualizada exitosamente');
+
   } catch (error) {
-    console.error('❌ Error al seleccionar proveedor:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'seleccionar proveedor');
+    console.error('❌ [CARRITO] Error al actualizar cantidad:', error);
+    return ApiResponse.error(res, 'Error al actualizar cantidad', 500);
   }
 };
 
-// Obtener lista de proveedores activos
+/**
+ * GET /api/carrito-pedidos/proveedores
+ * Obtener lista de proveedores activos
+ */
 export const obtenerProveedores = async (req, res) => {
   try {
+    console.log('🏢 [CARRITO] Obteniendo proveedores activos');
+    
     const [proveedores] = await pool.query(`
       SELECT 
         proveedor_id,
         proveedor_nombre,
         proveedor_contacto,
-        proveedor_email
+        proveedor_email,
+        proveedor_telefono
       FROM proveedores 
       WHERE proveedor_estado = 'activo'
       ORDER BY proveedor_nombre
     `);
 
+    console.log('✅ [CARRITO] Proveedores obtenidos:', proveedores.length);
     return ApiResponse.success(res, proveedores, 'Proveedores obtenidos exitosamente');
+
   } catch (error) {
-    console.error('❌ Error al obtener proveedores:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'obtener proveedores');
+    console.error('❌ [CARRITO] Error al obtener proveedores:', error);
+    return ApiResponse.error(res, 'Error al obtener proveedores', 500);
   }
 };
 
-// Vaciar carrito
+/**
+ * POST /api/carrito-pedidos/carrito/proveedor
+ * Seleccionar proveedor para el carrito
+ */
+export const seleccionarProveedor = async (req, res) => {
+  try {
+    console.log('🏢 [CARRITO] Seleccionando proveedor:', req.body);
+    
+    const usuario_id = req.user.usuario_id;
+    const { proveedor_id } = req.body;
+
+    if (!proveedor_id) {
+      return ApiResponse.error(res, 'Se requiere proveedor_id', 400);
+    }
+
+    // Validar que el proveedor existe y está activo
+    const [proveedores] = await pool.query(`
+      SELECT proveedor_id, proveedor_nombre 
+      FROM proveedores 
+      WHERE proveedor_id = ? AND proveedor_estado = 'activo'
+    `, [proveedor_id]);
+
+    if (proveedores.length === 0) {
+      return ApiResponse.error(res, 'Proveedor no encontrado o inactivo', 404);
+    }
+
+    const carrito = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    carrito.proveedor_id = proveedor_id;
+    carritosSesiones.set(usuario_id, carrito);
+
+    console.log('✅ [CARRITO] Proveedor seleccionado:', proveedor_id);
+    return ApiResponse.success(res, carrito, 'Proveedor seleccionado exitosamente');
+
+  } catch (error) {
+    console.error('❌ [CARRITO] Error al seleccionar proveedor:', error);
+    return ApiResponse.error(res, 'Error al seleccionar proveedor', 500);
+  }
+};
+
+/**
+ * DELETE /api/carrito-pedidos/carrito/vaciar
+ * Vaciar completamente el carrito
+ */
 export const vaciarCarrito = async (req, res) => {
   try {
-    const usuario_id = req.user.usuario_id;
+    console.log('🗑️ [CARRITO] Vaciando carrito para usuario:', req.user.usuario_id);
     
-    // Limpiar carrito del usuario
-    carritosSesiones.set(usuario_id, { items: [], proveedor_id: null });
+    const usuario_id = req.user.usuario_id;
+    const carritoVacio = { items: [], proveedor_id: null };
+    
+    carritosSesiones.set(usuario_id, carritoVacio);
 
-    return ApiResponse.success(res, { items: [], proveedor_id: null }, 'Carrito vaciado exitosamente');
+    console.log('✅ [CARRITO] Carrito vaciado exitosamente');
+    return ApiResponse.success(res, carritoVacio, 'Carrito vaciado exitosamente');
+
   } catch (error) {
-    console.error('❌ Error al vaciar carrito:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'vaciar carrito');
+    console.error('❌ [CARRITO] Error al vaciar carrito:', error);
+    return ApiResponse.error(res, 'Error al vaciar carrito', 500);
   }
 };
 
-// Confirmar pedido desde carrito
-export const crearPedidoDesdeCarrito = async (req, res) => {
-  const conn = await pool.getConnection();
+/**
+ * POST /api/carrito-pedidos/carrito/confirmar
+ * Confirmar pedido: Crear pedido en BD y actualizar faltantes
+ */
+export const confirmarPedido = async (req, res) => {
+  const connection = await pool.getConnection();
   
   try {
-    await conn.beginTransaction();
+    console.log('🎯 [CARRITO] Confirmando pedido para usuario:', req.user.usuario_id);
+    
+    await connection.beginTransaction();
     
     const usuario_id = req.user.usuario_id;
-    const carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
+    const carrito = carritosSesiones.get(usuario_id);
 
     // Validaciones
-    if (!carritoUsuario.items.length) {
+    if (!carrito || carrito.items.length === 0) {
       return ApiResponse.error(res, 'El carrito está vacío', 400);
     }
 
-    if (!carritoUsuario.proveedor_id) {
+    if (!carrito.proveedor_id) {
       return ApiResponse.error(res, 'Debe seleccionar un proveedor', 400);
     }
 
-    // Calcular total del pedido
-    let total = carritoUsuario.items.reduce((sum, item) => {
-      return sum + (item.cantidad * (item.precio_estimado || 0));
-    }, 0);
-
-    // Crear pedido principal
-    const [resultPedido] = await conn.query(`
+    // 1️⃣ Crear registro de pedido principal
+    const pedidoFecha = new Date();
+    const [pedidoResult] = await connection.query(`
       INSERT INTO pedidos (
         pedido_proveedor_id,
         pedido_usuario_id,
+        pedido_fecha,
         pedido_estado,
-        pedido_fecha_pedido,
         pedido_total,
-        pedido_descuento,
-        pedido_costo_envio,
         pedido_observaciones
-      ) VALUES (?, ?, 'pendiente', NOW(), ?, 0, 0, ?)
-    `, [
-      carritoUsuario.proveedor_id,
-      usuario_id,
-      total,
-      'Pedido generado desde carrito rápido de faltantes'
-    ]);
+      ) VALUES (?, ?, ?, 'pendiente', 0, 'Pedido generado desde Carrito de Pedido Rápido')
+    `, [carrito.proveedor_id, usuario_id, pedidoFecha]);
 
-    const pedido_id = resultPedido.insertId;
+    const pedido_id = pedidoResult.insertId;
+    console.log('📝 [CARRITO] Pedido creado con ID:', pedido_id);
 
-    // Crear detalles del pedido
-    for (const item of carritoUsuario.items) {
-      await conn.query(`
+    let totalPedido = 0;
+
+    // 2️⃣ Procesar cada item del carrito
+    for (const item of carrito.items) {
+      // Crear detalle del pedido
+      const [detalleResult] = await connection.query(`
         INSERT INTO pedidos_detalle (
-          pd_pedido_id,
-          pd_producto_id,
-          pd_variante_id,
-          pd_cantidad_pedida,
-          pd_precio_unitario
+          detalle_pedido_id,
+          detalle_variante_id,
+          detalle_cantidad,
+          detalle_precio_unitario,
+          detalle_subtotal
         ) VALUES (?, ?, ?, ?, ?)
       `, [
         pedido_id,
-        item.tipo === 'producto' ? item.producto_id : null,
-        item.tipo === 'variante' ? item.variante_id : null,
-        item.cantidad,
-        item.precio_estimado || 0
+        item.variante_id,
+        item.cantidad_pedida,
+        item.precio_unitario,
+        item.subtotal
       ]);
 
-      // Actualizar estado del faltante si existe
-      if (item.faltante_id) {
-        const cantidadSolicitada = item.cantidad;
-        const cantidadFaltante = Math.max(0, item.stock_minimo - item.stock_actual);
-        
-        let nuevoEstado;
-        if (cantidadSolicitada >= cantidadFaltante) {
-          nuevoEstado = 'solicitado_completo';
-        } else {
-          nuevoEstado = 'solicitado_parcial';
-        }
+      totalPedido += item.subtotal;
 
-        await conn.query(`
-          UPDATE faltantes 
-          SET faltante_estado = ?,
-              faltante_cantidad_solicitada = ?,
-              faltante_pedido_id = ?
-          WHERE faltante_id = ?
-        `, [nuevoEstado, cantidadSolicitada, pedido_id, item.faltante_id]);
-      }
+      // 3️⃣ Actualizar estado del faltante a 'pedido_realizado'
+      await connection.query(`
+        UPDATE faltantes 
+        SET 
+          faltante_estado = 'pedido_realizado',
+          faltante_pedido_id = ?,
+          faltante_fecha_resolucion = NOW()
+        WHERE faltante_id = ? AND faltante_variante_id = ?
+      `, [pedido_id, item.faltante_id, item.variante_id]);
+
+      // 4️⃣ Crear notificación de pedido realizado
+      await connection.query(`
+        INSERT INTO notificaciones_pendientes (
+          notificacion_tipo,
+          notificacion_titulo,
+          notificacion_mensaje,
+          notificacion_datos,
+          notificacion_usuario_objetivo,
+          notificacion_fecha_creacion,
+          notificacion_estado,
+          notificacion_prioridad
+        ) VALUES (
+          'pedido_realizado',
+          'Pedido Realizado',
+          ?,
+          ?,
+          ?,
+          NOW(),
+          'pendiente',
+          'media'
+        )
+      `, [
+        `Se ha creado el pedido #${pedido_id} para resolver el faltante de ${item.producto_nombre} (${item.cantidad_pedida} unidades)`,
+        JSON.stringify({
+          pedido_id: pedido_id,
+          faltante_id: item.faltante_id,
+          producto_nombre: item.producto_nombre,
+          cantidad: item.cantidad_pedida,
+          proveedor_id: carrito.proveedor_id
+        }),
+        usuario_id
+      ]);
+
+      console.log(`✅ [CARRITO] Procesado item: ${item.producto_nombre} x${item.cantidad_pedida}`);
     }
 
-    await conn.commit();
+    // 5️⃣ Actualizar total del pedido
+    await connection.query(`
+      UPDATE pedidos 
+      SET pedido_total = ? 
+      WHERE pedido_id = ?
+    `, [totalPedido, pedido_id]);
 
-    // Limpiar carrito después de crear el pedido
-    carritosSesiones.set(usuario_id, { items: [], proveedor_id: null });
+    await connection.commit();
 
-    return ApiResponse.success(res, {
-      pedido_id,
-      mensaje: 'Pedido creado exitosamente',
-      items_procesados: carritoUsuario.items.length,
-      total
-    }, 'Pedido de reposición creado exitosamente');
+    // 6️⃣ Limpiar carrito después de confirmar
+    carritosSesiones.delete(usuario_id);
+
+    const pedidoFinal = {
+      pedido_id: pedido_id,
+      pedido_fecha: pedidoFecha,
+      pedido_estado: 'pendiente',
+      pedido_total: totalPedido,
+      proveedor_id: carrito.proveedor_id,
+      items_procesados: carrito.items.length,
+      faltantes_resueltos: carrito.items.map(item => item.faltante_id)
+    };
+
+    console.log('🎉 [CARRITO] Pedido confirmado exitosamente:', pedidoFinal);
+    return ApiResponse.success(res, pedidoFinal, 'Pedido confirmado y procesado exitosamente');
 
   } catch (error) {
-    await conn.rollback();
-    console.error('❌ Error al crear pedido desde carrito:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'crear pedido desde carrito');
+    await connection.rollback();
+    console.error('❌ [CARRITO] Error al confirmar pedido:', error);
+    return ApiResponse.error(res, 'Error al confirmar el pedido: ' + error.message, 500);
   } finally {
-    conn.release();
+    connection.release();
   }
 };
 
-// Agregar todos los faltantes al carrito
-export const agregarTodosFaltantes = async (req, res) => {
+/**
+ * GET /api/carrito-pedidos/faltantes
+ * Obtener faltantes disponibles para agregar al carrito
+ */
+export const obtenerFaltantesDisponibles = async (req, res) => {
   try {
-    const usuario_id = req.user.usuario_id;
+    console.log('🔍 [CARRITO] Obteniendo faltantes disponibles');
     
-    // Obtener todos los faltantes detectados
     const [faltantes] = await pool.query(`
       SELECT 
         f.faltante_id,
-        f.faltante_producto_id as producto_id,
-        f.faltante_variante_id as variante_id,
-        f.faltante_cantidad_faltante as cantidad_faltante,
-        
-        -- Información del producto
-        CASE 
-          WHEN f.faltante_variante_id IS NOT NULL THEN 
-            (SELECT p2.producto_nombre FROM variantes v2 JOIN productos p2 ON v2.producto_id = p2.producto_id WHERE v2.variante_id = f.faltante_variante_id)
-          WHEN f.faltante_producto_id IS NOT NULL THEN 
-            p.producto_nombre
-          ELSE 'Producto no identificado'
-        END AS producto_nombre,
-        
-        -- Información de la variante (si aplica)
+        f.faltante_variante_id,
+        f.faltante_cantidad_faltante,
+        f.faltante_estado,
+        f.faltante_fecha_deteccion,
         v.variante_sku,
-        GROUP_CONCAT(CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos,
-        
-        -- Stock actual
-        CASE 
-          WHEN f.faltante_variante_id IS NOT NULL THEN 
-            (SELECT s2.cantidad FROM stock s2 WHERE s2.variante_id = f.faltante_variante_id)
-          WHEN f.faltante_producto_id IS NOT NULL THEN 
-            (SELECT s2.cantidad FROM stock s2 WHERE s2.producto_id = f.faltante_producto_id)
-          ELSE 0
-        END AS stock_actual,
-        
-        -- Stock mínimo
-        CASE 
-          WHEN f.faltante_variante_id IS NOT NULL THEN 
-            (SELECT s2.stock_minimo FROM stock s2 WHERE s2.variante_id = f.faltante_variante_id)
-          WHEN f.faltante_producto_id IS NOT NULL THEN 
-            (SELECT s2.stock_minimo FROM stock s2 WHERE s2.producto_id = f.faltante_producto_id)
-          ELSE 0
-        END AS stock_minimo,
-        
-        -- Imagen
-        CASE 
-          WHEN f.faltante_variante_id IS NOT NULL THEN ip2.imagen_url
-          WHEN f.faltante_producto_id IS NOT NULL THEN ip.imagen_url
-          ELSE NULL
-        END AS imagen_url
-        
+        v.variante_precio_venta,
+        p.producto_nombre,
+        s.cantidad AS stock_actual,
+        s.stock_minimo,
+        GROUP_CONCAT(DISTINCT CONCAT(a.atributo_nombre, ': ', vv.valor_nombre) SEPARATOR ', ') AS atributos
       FROM faltantes f
-      LEFT JOIN productos p ON f.faltante_producto_id = p.producto_id
-      LEFT JOIN variantes v ON f.faltante_variante_id = v.variante_id
+      INNER JOIN variantes v ON f.faltante_variante_id = v.variante_id
+      INNER JOIN productos p ON v.producto_id = p.producto_id
+      LEFT JOIN stock s ON s.variante_id = v.variante_id
       LEFT JOIN valores_variantes vv ON vv.variante_id = v.variante_id
       LEFT JOIN atributos a ON a.atributo_id = vv.atributo_id
-      LEFT JOIN imagenes_productos ip ON ip.producto_id = p.producto_id AND ip.imagen_orden = 1
-      LEFT JOIN imagenes_productos ip2 ON ip2.imagen_id = v.imagen_id
-      
-      WHERE f.faltante_resuelto = FALSE 
-        AND f.faltante_estado IN ('detectado', 'pendiente')
-      
-      GROUP BY f.faltante_id
+      WHERE f.faltante_estado IN ('detectado', 'registrado')
+      GROUP BY f.faltante_id, f.faltante_variante_id
       ORDER BY f.faltante_fecha_deteccion DESC
     `);
 
-    if (!faltantes.length) {
-      return ApiResponse.success(res, { items: [], mensaje: 'No hay faltantes pendientes para agregar' });
-    }
-
-    // Obtener carrito actual
-    let carritoUsuario = carritosSesiones.get(usuario_id) || { items: [], proveedor_id: null };
-
-    // Agregar cada faltante al carrito
-    for (const faltante of faltantes) {
-      const itemKey = faltante.variante_id ? `variante_${faltante.variante_id}` : `producto_${faltante.producto_id}`;
-      
-      // Verificar si ya existe
-      const itemExistente = carritoUsuario.items.find(item => item.key === itemKey);
-      
-      if (!itemExistente) {
-        carritoUsuario.items.push({
-          key: itemKey,
-          faltante_id: faltante.faltante_id,
-          producto_id: faltante.producto_id,
-          variante_id: faltante.variante_id,
-          producto_nombre: faltante.producto_nombre,
-          variante_sku: faltante.variante_sku,
-          atributos: faltante.atributos,
-          cantidad: faltante.cantidad_faltante || Math.max(0, faltante.stock_minimo - faltante.stock_actual),
-          stock_actual: faltante.stock_actual,
-          stock_minimo: faltante.stock_minimo,
-          imagen_url: faltante.imagen_url,
-          tipo: faltante.variante_id ? 'variante' : 'producto',
-          precio_estimado: 0
-        });
-      }
-    }
-
-    // Guardar carrito actualizado
-    carritosSesiones.set(usuario_id, carritoUsuario);
-
-    return ApiResponse.success(res, {
-      carrito: carritoUsuario,
-      faltantes_agregados: faltantes.length,
-      mensaje: `${faltantes.length} faltantes agregados al carrito`
-    }, 'Todos los faltantes agregados exitosamente');
+    console.log('✅ [CARRITO] Faltantes disponibles obtenidos:', faltantes.length);
+    return ApiResponse.success(res, faltantes, 'Faltantes disponibles obtenidos exitosamente');
 
   } catch (error) {
-    console.error('❌ Error al agregar todos los faltantes:', error);
-    return ApiResponse.manejarErrorDB(error, res, 'agregar todos los faltantes');
+    console.error('❌ [CARRITO] Error al obtener faltantes:', error.message);
+    console.error('❌ [CARRITO] Stack trace:', error.stack);
+    return ApiResponse.error(res, 'Error al obtener faltantes disponibles', 500);
+  }
+};
+
+/**
+ * GET /api/carrito-pedidos/test
+ * Endpoint de prueba para verificar conectividad
+ */
+export const probarConexion = async (req, res) => {
+  try {
+    console.log('🔍 [DIAGNÓSTICO] Prueba de conexión solicitada');
+    
+    // Verificar conexión a la base de datos
+    const [result] = await pool.query('SELECT 1 as test');
+    
+    const diagnostico = {
+      servidor: 'OK',
+      baseDatos: 'OK',
+      usuario: req.user ? req.user.usuario_id : 'No autenticado',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0'
+    };
+    
+    console.log('✅ [DIAGNÓSTICO] Conexión exitosa:', diagnostico);
+    return ApiResponse.success(res, diagnostico, 'Conexión exitosa');
+
+  } catch (error) {
+    console.error('❌ [DIAGNÓSTICO] Error en prueba de conexión:', error);
+    return ApiResponse.error(res, 'Error en la prueba de conexión', 500);
+  }
+};
+
+/**
+ * GET /api/carrito-pedidos/carrito/info
+ * Obtener información detallada del carrito con diagnósticos
+ */
+export const obtenerInfoCarrito = async (req, res) => {
+  try {
+    console.log('📊 [CARRITO] Obteniendo información detallada del carrito');
+    
+    const usuario_id = req.user.usuario_id;
+    const carritoUsuario = carritosSesiones.get(usuario_id) || { 
+      items: [], 
+      proveedor_id: null 
+    };
+    
+    // Estadísticas del carrito
+    const estadisticas = {
+      totalItems: carritoUsuario.items?.length || 0,
+      totalCantidad: carritoUsuario.items?.reduce((sum, item) => sum + item.cantidad, 0) || 0,
+      totalEstimado: carritoUsuario.items?.reduce((sum, item) => sum + (item.cantidad * (item.precio_estimado || 0)), 0) || 0,
+      itemsCriticos: carritoUsuario.items?.filter(item => item.stock_actual === 0).length || 0,
+      tieneProveedor: !!carritoUsuario.proveedor_id
+    };
+    
+    const info = {
+      carrito: carritoUsuario,
+      estadisticas,
+      usuario_id,
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('✅ [CARRITO] Información detallada obtenida');
+    return ApiResponse.success(res, info, 'Información del carrito obtenida exitosamente');
+
+  } catch (error) {
+    console.error('❌ [CARRITO] Error al obtener información del carrito:', error);
+    return ApiResponse.error(res, 'Error al obtener información del carrito', 500);
   }
 };

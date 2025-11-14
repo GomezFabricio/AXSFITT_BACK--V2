@@ -6,17 +6,19 @@ import {
   agregarAlCarrito,
   quitarDelCarrito,
   actualizarCantidadCarrito,
-  seleccionarProveedor,
   obtenerProveedores,
+  seleccionarProveedor,
   vaciarCarrito,
-  crearPedidoDesdeCarrito,
-  agregarTodosFaltantes
+  confirmarPedido,
+  obtenerFaltantesDisponibles,
+  probarConexion,
+  obtenerInfoCarrito
 } from '../controllers/carrito-pedidos.controller.js';
 
 const router = express.Router();
 
 /**
- * Rutas para Carrito de Pedido Rápido
+ * Rutas para el Carrito de Pedido Rápido
  * Todas las rutas requieren autenticación y permisos de gestión de stock
  */
 
@@ -30,20 +32,26 @@ router.use(validarPermisos('Gestionar Stock'));
 
 /**
  * GET /api/carrito-pedidos/carrito
- * Obtener el carrito actual del usuario
+ * Obtener carrito actual del usuario
  */
 router.get('/carrito', obtenerCarrito);
 
 /**
+ * GET /api/carrito-pedidos/carrito/info
+ * Obtener información detallada del carrito con diagnósticos
+ */
+router.get('/carrito/info', obtenerInfoCarrito);
+
+/**
  * POST /api/carrito-pedidos/carrito/agregar
- * Agregar un faltante al carrito
- * Body: { faltante_id?, producto_id?, variante_id?, cantidad_necesaria? }
+ * Agregar faltante al carrito
+ * Body: { faltante_id, variante_id, cantidad? }
  */
 router.post('/carrito/agregar', agregarAlCarrito);
 
 /**
  * DELETE /api/carrito-pedidos/carrito/quitar
- * Quitar un item del carrito
+ * Quitar item del carrito
  * Body: { item_key }
  */
 router.delete('/carrito/quitar', quitarDelCarrito);
@@ -54,12 +62,6 @@ router.delete('/carrito/quitar', quitarDelCarrito);
  * Body: { item_key, cantidad }
  */
 router.put('/carrito/cantidad', actualizarCantidadCarrito);
-
-/**
- * POST /api/carrito-pedidos/carrito/agregar-todos
- * Agregar todos los faltantes pendientes al carrito
- */
-router.post('/carrito/agregar-todos', agregarTodosFaltantes);
 
 /**
  * DELETE /api/carrito-pedidos/carrito/vaciar
@@ -86,8 +88,22 @@ router.post('/carrito/proveedor', seleccionarProveedor);
 
 /**
  * POST /api/carrito-pedidos/carrito/confirmar
- * Crear pedido real desde el carrito y actualizar estados de faltantes
+ * Confirmar pedido: Crear pedido en BD y actualizar faltantes
  */
-router.post('/carrito/confirmar', crearPedidoDesdeCarrito);
+router.post('/carrito/confirmar', confirmarPedido);
+
+// ==================== UTILIDADES ====================
+
+/**
+ * GET /api/carrito-pedidos/faltantes
+ * Obtener faltantes disponibles para agregar al carrito
+ */
+router.get('/faltantes', obtenerFaltantesDisponibles);
+
+/**
+ * GET /api/carrito-pedidos/test
+ * Endpoint de diagnóstico para probar conectividad
+ */
+router.get('/test', probarConexion);
 
 export default router;
