@@ -1,4 +1,5 @@
 import { NotificacionesService } from '../services/notificaciones.service.js';
+import NotificacionesStockService from '../services/notificaciones-stock.service.js';
 import { ApiResponse } from '../utils/apiResponse.js';
 
 /**
@@ -295,5 +296,131 @@ export const obtenerFaltantes = async (req, res) => {
   } catch (error) {
     console.error('❌ Error en obtenerFaltantes:', error);
     return ApiResponse.error(res, 'Error al obtener faltantes', 500);
+  }
+};
+
+/**
+ * Ejecuta el procesamiento completo de notificaciones con agrupación
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const procesarNotificacionesCompletas = async (req, res) => {
+  try {
+    console.log('🚀 Procesamiento completo solicitado por usuario:', req.user?.email || 'Desconocido');
+    
+    const resultado = await NotificacionesStockService.procesarNotificaciones();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Procesamiento de notificaciones completado',
+      data: resultado,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error en procesarNotificacionesCompletas:', error);
+    return ApiResponse.error(res, 'Error al procesar notificaciones', 500);
+  }
+};
+
+/**
+ * Ejecuta manualmente el proceso de agrupación
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const agruparNotificaciones = async (req, res) => {
+  try {
+    console.log('🔗 Agrupación manual solicitada por usuario:', req.user?.email || 'Desconocido');
+    
+    const resultado = await NotificacionesStockService.ejecutarAgrupacionAutomatica();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Agrupación de notificaciones completada',
+      data: resultado,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error en agruparNotificaciones:', error);
+    return ApiResponse.error(res, 'Error al agrupar notificaciones', 500);
+  }
+};
+
+/**
+ * Obtiene estadísticas de las notificaciones
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const obtenerEstadisticasNotificaciones = async (req, res) => {
+  try {
+    const estadisticas = await NotificacionesStockService.obtenerEstadisticas();
+    
+    res.status(200).json({
+      success: true,
+      data: estadisticas,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error en obtenerEstadisticasNotificaciones:', error);
+    return ApiResponse.error(res, 'Error al obtener estadísticas de notificaciones', 500);
+  }
+};
+
+/**
+ * Crea un faltante de prueba para verificar el sistema
+ * @param {Object} req - Objeto de solicitud
+ * @param {Object} res - Objeto de respuesta
+ */
+export const crearFaltantePrueba = async (req, res) => {
+  try {
+    const { producto_id, cantidad_faltante = 5, cantidad_original = 20 } = req.body;
+    
+    if (!producto_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'producto_id es requerido'
+      });
+    }
+    
+    console.log(`🧪 Creando faltante de prueba para producto ${producto_id} por usuario:`, req.user?.email || 'Desconocido');
+    
+    // Crear faltante de prueba
+    const { pool } = await import('../db.js');
+    const [result] = await pool.query(`
+      INSERT INTO faltantes (
+        faltante_producto_id, 
+        faltante_cantidad_original, 
+        faltante_cantidad_faltante, 
+        faltante_estado,
+        faltante_fecha_deteccion
+      ) VALUES (?, ?, ?, 'detectado', NOW())
+    `, [producto_id, cantidad_original, cantidad_faltante]);
+    
+    const faltanteId = result.insertId;
+    
+    // Verificar notificación creada
+    const [notificacion] = await pool.query(`
+      SELECT id, asunto, tipo_frecuencia, estado, 
+             DATE_FORMAT(fecha_envio_programada, '%d/%m/%Y') as fecha_programada
+      FROM notificaciones_pendientes 
+      WHERE faltante_id = ?
+      ORDER BY fecha_creacion DESC 
+      LIMIT 1
+    `, [faltanteId]);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Faltante de prueba creado exitosamente',
+      data: {
+        faltante_id: faltanteId,
+        producto_id,
+        cantidad_faltante,
+        notificacion_creada: notificacion[0] || null
+      },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en crearFaltantePrueba:', error);
+    return ApiResponse.error(res, 'Error al crear faltante de prueba', 500);
   }
 };

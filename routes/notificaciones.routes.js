@@ -13,7 +13,11 @@ import {
   eliminarContacto,
   obtenerConfiguracionFrecuencia,
   actualizarConfiguracionFrecuencia,
-  obtenerFaltantes
+  obtenerFaltantes,
+  procesarNotificacionesCompletas,
+  agruparNotificaciones,
+  obtenerEstadisticasNotificaciones,
+  crearFaltantePrueba
 } from '../controllers/notificaciones.controller.js';
 import authenticate from '../middlewares/auth.middleware.js';
 import validarPermisos from '../middlewares/validarPermiso.js';
@@ -122,6 +126,40 @@ router.get(
   authenticate, 
   validarPermisos('Gestionar Stock'), 
   obtenerFaltantes
+);
+
+// === NUEVAS RUTAS PARA SISTEMA DE NOTIFICACIONES AGRUPADAS ===
+
+// Ruta para procesar notificaciones completas con agrupación
+router.post(
+  '/procesar-completo', 
+  authenticate, 
+  validarPermisos('Gestionar Stock'), 
+  procesarNotificacionesCompletas
+);
+
+// Ruta para ejecutar agrupación manual
+router.post(
+  '/agrupar', 
+  authenticate, 
+  validarPermisos('Gestionar Stock'), 
+  agruparNotificaciones
+);
+
+// Ruta para obtener estadísticas de notificaciones
+router.get(
+  '/estadisticas', 
+  authenticate, 
+  validarPermisos('Gestionar Stock'), 
+  obtenerEstadisticasNotificaciones
+);
+
+// Ruta para crear faltante de prueba
+router.post(
+  '/test-faltante', 
+  authenticate, 
+  validarPermisos('Gestionar Stock'), 
+  crearFaltantePrueba
 );
 
 export default router;

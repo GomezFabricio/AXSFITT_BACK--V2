@@ -307,7 +307,56 @@ export class NotificacionesService {
    */
   static async actualizarConfiguracion(configTipo, datos) {
     try {
-      const { activo, frecuencia, horaEnvio, diasSemana, plantillaPersonalizada } = datos;
+      console.log(`🔧 Actualizando configuración ${configTipo} con datos:`, datos);
+      
+      // Obtener configuración actual para preservar campos no enviados
+      const [configActual] = await pool.query(`
+        SELECT * FROM notificaciones_config 
+        WHERE config_tipo = ? AND config_usuario_id = 1
+      `, [configTipo]);
+
+      // Si no existe configuración, crear una nueva
+      if (configActual.length === 0) {
+        await pool.query(`
+          INSERT INTO notificaciones_config (
+            config_tipo, 
+            config_usuario_id,
+            config_activo,
+            config_frecuencia,
+            config_hora_envio,
+            config_dias_semana,
+            config_plantilla_personalizada,
+            config_fecha_creacion,
+            config_fecha_actualizacion
+          ) VALUES (?, 1, ?, ?, ?, ?, ?, NOW(), NOW())
+        `, [
+          configTipo,
+          datos.activo ?? 0,
+          datos.frecuencia ?? 'inmediata',
+          datos.horaEnvio ?? '09:00:00',
+          datos.diasSemana ? JSON.stringify(datos.diasSemana) : JSON.stringify(['1', '2', '3', '4', '5']),
+          datos.plantillaPersonalizada ?? null
+        ]);
+        
+        console.log(`✅ Configuración ${configTipo} creada exitosamente`);
+        return;
+      }
+
+      // Preparar datos para actualización, preservando valores actuales si no se envían
+      const actual = configActual[0];
+      const datosFinales = {
+        activo: datos.activo !== undefined ? datos.activo : actual.config_activo,
+        frecuencia: datos.frecuencia ?? actual.config_frecuencia,
+        horaEnvio: datos.horaEnvio ?? actual.config_hora_envio,
+        diasSemana: datos.diasSemana !== undefined 
+          ? JSON.stringify(datos.diasSemana) 
+          : actual.config_dias_semana,
+        plantillaPersonalizada: datos.plantillaPersonalizada !== undefined 
+          ? datos.plantillaPersonalizada 
+          : actual.config_plantilla_personalizada
+      };
+      
+      console.log(`📝 Datos finales a guardar:`, datosFinales);
       
       await pool.query(`
         UPDATE notificaciones_config 
@@ -318,12 +367,19 @@ export class NotificacionesService {
             config_plantilla_personalizada = ?,
             config_fecha_actualizacion = NOW()
         WHERE config_tipo = ? AND config_usuario_id = 1
-      `, [activo, frecuencia, horaEnvio, JSON.stringify(diasSemana), plantillaPersonalizada, configTipo]);
+      `, [
+        datosFinales.activo,
+        datosFinales.frecuencia,
+        datosFinales.horaEnvio,
+        datosFinales.diasSemana,
+        datosFinales.plantillaPersonalizada,
+        configTipo
+      ]);
       
-      console.log(`✅ Configuración ${configTipo} actualizada`);
+      console.log(`✅ Configuración ${configTipo} actualizada exitosamente`);
       
     } catch (error) {
-      console.error('❌ Error actualizando configuración:', error);
+      console.error(`❌ Error actualizando configuración ${configTipo}:`, error);
       throw error;
     }
   }
@@ -578,15 +634,51 @@ export class NotificacionesService {
     try {
       const { frecuencia, horaEnvio } = datos;
       
-      await pool.query(`
-        UPDATE notificaciones_config 
-        SET 
-          config_frecuencia = ?,
-          config_hora_envio = ?
+      // Obtener configuración actual para verificar dias_semana
+      const [configActual] = await pool.query(`
+        SELECT config_dias_semana 
+        FROM notificaciones_config 
         WHERE config_tipo = ?
-      `, [frecuencia, horaEnvio, tipo]);
+      `, [tipo]);
       
-      console.log(`✅ Configuración de frecuencia actualizada para ${tipo}`);
+      let diasSemanaFinal = null;
+      
+      // Si no hay configuración actual o los días están vacíos/null, configurar valores por defecto
+      const diasActuales = configActual[0]?.config_dias_semana;
+      const tieneDiasValidos = diasActuales && diasActuales !== 'null' && diasActuales !== 'NULL';
+      
+      if (!tieneDiasValidos || frecuencia === 'semanal') {
+        if (frecuencia === 'diaria') {
+          diasSemanaFinal = JSON.stringify(['1', '2', '3', '4', '5']); // Lunes a Viernes
+        } else if (frecuencia === 'semanal') {
+          diasSemanaFinal = JSON.stringify(['1']); // Solo lunes para semanal
+        }
+      }
+      
+      // Actualizar configuración
+      if (diasSemanaFinal) {
+        await pool.query(`
+          UPDATE notificaciones_config 
+          SET 
+            config_frecuencia = ?,
+            config_hora_envio = ?,
+            config_dias_semana = ?
+          WHERE config_tipo = ?
+        `, [frecuencia, horaEnvio, diasSemanaFinal, tipo]);
+        
+        console.log(`✅ Configuración de frecuencia actualizada para ${tipo} (frecuencia: ${frecuencia}, días configurados automáticamente)`);
+      } else {
+        await pool.query(`
+          UPDATE notificaciones_config 
+          SET 
+            config_frecuencia = ?,
+            config_hora_envio = ?
+          WHERE config_tipo = ?
+        `, [frecuencia, horaEnvio, tipo]);
+        
+        console.log(`✅ Configuración de frecuencia actualizada para ${tipo} (frecuencia: ${frecuencia}, días mantenidos)`);
+      }
+      
     } catch (error) {
       console.error('❌ Error actualizando configuración de frecuencia:', error);
       throw error;
